@@ -1,0 +1,44 @@
+
+spring:
+#  jpa:
+#    properties:
+#      javax:
+#        persistence:
+#          schema-generation:
+#            scripts:
+#              action: create
+#              create-target: create.sql
+#              create-source: metadata
+  application:
+    name: gastos-service
+  profiles:
+    active: prod
+  config:
+    import: 'vault://, configserver:http://config-server:8888'
+  cloud:
+    vault:
+      host: ${VAULT_HOST:localhost}
+      port: ${VAULT_PORT:8200}
+      scheme: ${VAULT_SCHEME:http}
+      uri: ${VAULT_SCHEME:http}://${VAULT_HOST:localhost}:${VAULT_PORT:8200}
+      token: ${VAULT_TOKEN:hvs.VSlxeCypMevB7HLAYZ1hB73L}
+      generic:
+        enabled: true
+        application-name: remedios-service
+    config:
+      username: ${CONFIG_SERVER_USER:config}
+      password: ${CONFIG_SERVER_PASS:o5qByEjgPOwh3yXOqf}
+
+logging:
+  file:
+    name: log.log
+    path: .
+
+info:
+  app:
+    name: @project.name@
+    description: @project.description@
+    version: @project.version@
+    encoding: @project.build.sourceEncoding@
+    java:
+      version: @java.version@
