@@ -34,6 +34,9 @@ public interface LancamentoRepository extends JpaRepository<Lancamento, Long> {
 
     boolean existsByCategoria(Categoria categoria);
 
+    /** Compras de cartão do usuário cujas faturas vencem no período, de qualquer cartão. */
+    List<Lancamento> findAllByUsuarioAndCartaoIsNotNullAndFaturaBetween(UUID usuario, LocalDate inicio, LocalDate fim);
+
     List<Lancamento> findAllByPagamento(Movimentacao pagamento);
 
     List<Lancamento> findAllByParcelamentoAndParcelaGreaterThanEqualAndRealizadoFalse(UUID parcelamento, Integer parcela);

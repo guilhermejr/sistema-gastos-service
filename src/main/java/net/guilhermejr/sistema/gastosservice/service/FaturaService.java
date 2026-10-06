@@ -121,7 +121,13 @@ public class FaturaService {
     public FaturaResumidaResponse resumoAtual(Cartao cartao) {
 
         YearMonth mes = mesDaFaturaAtual(cartao);
-        List<Lancamento> lancamentos = lancamentos(cartao, mes);
+        return resumo(cartao, mes, lancamentos(cartao, mes));
+
+    }
+
+    /** Resumo da fatura do mês a partir dos lançamentos dela, já carregados. */
+    public FaturaResumidaResponse resumo(Cartao cartao, YearMonth mes, List<Lancamento> lancamentos) {
+
         LocalDate vencimento = CalendarioUtil.vencimentoNoMes(mes, cartao.getDiaVencimento());
         LocalDate fechamento = CalendarioUtil.fechamento(vencimento, cartao.getDiasFechamento());
         BigDecimal pendente = liquido(lancamentos.stream().filter(l -> !l.getRealizado()).toList());

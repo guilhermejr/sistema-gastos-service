@@ -21,6 +21,9 @@ public class RelatorioMensalResponse {
     private BigDecimal saldoRealizado;
     /** Entradas menos saídas, contando o que ainda está pendente. */
     private BigDecimal saldoPrevisto;
+    /** Só os lançamentos em conta; compras de cartão entram pelas faturas. */
     private List<LancamentoResponse> lancamentos;
+    /** Faturas com vencimento no mês, uma por cartão, com o total de cada uma. */
+    private List<FaturaResumidaResponse> faturas;
 
 }

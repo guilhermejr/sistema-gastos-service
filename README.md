@@ -23,7 +23,7 @@ Valores monetários são **enviados** como texto no formato brasileiro (`"1.234,
 | Método | Rota | Descrição |
 |---|---|---|
 | `GET` | `/dashboard` | receitas e despesas do mês, Saldo Geral, Saldo Total, faturas atuais, contas do saldo geral, próximos 5 a pagar e a receber |
-| `GET` | `/relatorios/{ano}/{mes}` | lançamentos do mês com totais de entradas e saídas, realizados e pendentes |
+| `GET` | `/relatorios/{ano}/{mes}` | lançamentos em conta do mês e, de cada cartão, só o total da fatura que vence no mês (`faturas`), com totais de entradas e saídas, realizados e pendentes |
 
 ### `/categorias`
 
@@ -79,6 +79,7 @@ Valores monetários são **enviados** como texto no formato brasileiro (`"1.234,
 - **Saldo da conta** = saldo inicial + receitas realizadas − despesas realizadas + depósitos e transferências recebidas − saques, transferências enviadas e faturas pagas. Lançamento pendente não conta.
 - **Saldo Geral** soma as contas ativas marcadas com `somaSaldoGeral`; **Saldo Total** soma todas as contas ativas.
 - **Cartão**: a fatura fecha `diasFechamento` dias antes do vencimento. A compra precisa ser **anterior** à data de fechamento para entrar na fatura; no próprio dia já vai para a seguinte. Compra no cartão não mexe em conta: quem debita a conta é o pagamento da fatura, que também marca as compras como realizadas. Uma compra ainda não paga pode ser transferida para uma fatura seguinte; a escolha é mantida mesmo se o lançamento for editado ou o vencimento do cartão mudar.
+- **Relatório mensal**: lançamentos em conta pela data; cartão de crédito só pelo total de cada fatura, na data de vencimento. O que já foi pago da fatura conta como realizado.
 - **Despesa fixa** repete todo mês no mesmo dia (dia 31 vira o último dia em meses curtos). As ocorrências são criadas sob demanda, quando o mês é consultado.
 - **Parcelado**: o valor informado é o total; a divisão é em centavos e a sobra vai para a primeira parcela.
 
