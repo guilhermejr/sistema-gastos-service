@@ -55,7 +55,8 @@ public class DashboardService {
 
         recorrenciaService.gerarAte(usuario, mes.plusMonths(1).atEndOfMonth());
 
-        List<Lancamento> doMes = lancamentoRepository.findAllByUsuarioAndDataBetweenOrderByDataAscIdAsc(usuario, mes.atDay(1), mes.atEndOfMonth());
+        // Mesma regra do relatório: cartão entra pelo total da fatura que vence no mês.
+        RelatorioService.Calculo doMes = relatorioService.calcular(usuario, mes);
 
         List<Conta> contas = contaRepository.findAllByUsuarioAndAtivoTrueOrderByNomeAsc(usuario);
         Map<Long, BigDecimal> saldos = saldoService.saldos(usuario, contas);
@@ -69,8 +70,8 @@ public class DashboardService {
         return DashboardResponse.builder()
                 .ano(mes.getYear())
                 .mes(mes.getMonthValue())
-                .receitas(relatorioService.totais(doMes, TipoLancamento.R))
-                .despesas(relatorioService.totais(doMes, TipoLancamento.D))
+                .receitas(doMes.entradas())
+                .despesas(doMes.saidas())
                 .saldoGeral(saldoGeral)
                 .saldoTotal(saldoTotal)
                 .faturas(faturas.stream().map(FaturaResumidaResponse::getTotal).reduce(BigDecimal.ZERO, BigDecimal::add))

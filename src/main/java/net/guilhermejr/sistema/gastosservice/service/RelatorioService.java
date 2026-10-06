@@ -44,6 +44,11 @@ public class RelatorioService {
     private final ConverteStringUtil converteStringUtil;
     private final AuthenticationCurrentUserService authenticationCurrentUserService;
 
+    /** Entradas e saídas de um mês pela regra acima, com as listas que as compõem. */
+    public record Calculo(TotaisResponse entradas, TotaisResponse saidas,
+                          List<Lancamento> emConta, List<FaturaResumidaResponse> faturas) {
+    }
+
     @Transactional
     public RelatorioMensalResponse mensal(Integer ano, Integer mes) {
 
@@ -51,6 +56,29 @@ public class RelatorioService {
         YearMonth periodo = converteStringUtil.toYearMonth(ano, mes);
 
         recorrenciaService.gerarAte(usuario, periodo.atEndOfMonth());
+        Calculo calculo = calcular(usuario, periodo);
+        TotaisResponse entradas = calculo.entradas();
+        TotaisResponse saidas = calculo.saidas();
+
+        return RelatorioMensalResponse.builder()
+                .ano(periodo.getYear())
+                .mes(periodo.getMonthValue())
+                .entradas(entradas)
+                .saidas(saidas)
+                .saldoRealizado(entradas.getRealizado().subtract(saidas.getRealizado()))
+                .saldoPrevisto(entradas.getTotal().subtract(saidas.getTotal()))
+                .lancamentos(lancamentoMapper.mapList(calculo.emConta()))
+                .faturas(calculo.faturas())
+                .build();
+
+    }
+
+    /**
+     * Calcula o mês. Usado também pelos cards de Receitas e Despesas do dashboard, para
+     * que eles e o relatório nunca discordem. Quem chama gera antes as ocorrências fixas
+     * até o fim do mês.
+     */
+    public Calculo calcular(UUID usuario, YearMonth periodo) {
 
         List<Lancamento> emConta = lancamentoRepository
                 .findAllByUsuarioAndDataBetweenOrderByDataAscIdAsc(usuario, periodo.atDay(1), periodo.atEndOfMonth())
@@ -72,20 +100,11 @@ public class RelatorioService {
                 saidasEmConta.getRealizado().add(faturasTotal.subtract(faturasPendente)),
                 saidasEmConta.getPendente().add(faturasPendente));
 
-        return RelatorioMensalResponse.builder()
-                .ano(periodo.getYear())
-                .mes(periodo.getMonthValue())
-                .entradas(entradas)
-                .saidas(saidas)
-                .saldoRealizado(entradas.getRealizado().subtract(saidas.getRealizado()))
-                .saldoPrevisto(entradas.getTotal().subtract(saidas.getTotal()))
-                .lancamentos(lancamentoMapper.mapList(emConta))
-                .faturas(faturas)
-                .build();
+        return new Calculo(entradas, saidas, emConta, faturas);
 
     }
 
-    public TotaisResponse totais(List<Lancamento> lancamentos, TipoLancamento tipo) {
+    private TotaisResponse totais(List<Lancamento> lancamentos, TipoLancamento tipo) {
 
         BigDecimal realizado = BigDecimal.ZERO;
         BigDecimal pendente = BigDecimal.ZERO;
