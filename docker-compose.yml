@@ -1,0 +1,12 @@
+services:
+  gastos-service:
+    image: guilhermejr/sistema-gastos-service
+    container_name: gastos-service
+    restart: always
+    ports:
+      - "9008:9008"
+
+networks:
+  default:
+    external: true
+    name: rede

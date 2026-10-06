@@ -1,0 +1,39 @@
+package net.guilhermejr.sistema.gastosservice.domain.entity;
+
+import jakarta.persistence.*;
+import lombok.*;
+
+import java.io.Serializable;
+import java.math.BigDecimal;
+
+@Getter
+@Setter
+@EqualsAndHashCode(onlyExplicitlyIncluded = true, callSuper = false)
+@NoArgsConstructor
+@AllArgsConstructor
+@Entity
+@Table(name = "contas")
+public class Conta extends Auditoria implements Serializable {
+
+    private static final long serialVersionUID = 1L;
+
+    @Id
+    @GeneratedValue(strategy = GenerationType.IDENTITY)
+    @EqualsAndHashCode.Include
+    private Long id;
+
+    @Column(nullable = false)
+    private String nome;
+
+    /** Saldo no dia do cadastro. O saldo atual é calculado a partir dele. */
+    @Column(nullable = false)
+    private BigDecimal saldoInicial;
+
+    /** Entra no "Saldo Geral". O "Saldo Total" soma todas as contas ativas. */
+    @Column(nullable = false)
+    private Boolean somaSaldoGeral;
+
+    @Column(nullable = false)
+    private Boolean ativo;
+
+}

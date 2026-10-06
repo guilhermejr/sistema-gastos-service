@@ -1,0 +1,44 @@
+<configuration>
+
+    <springProperty scope="context" name="APP_NAME" source="spring.application.name"/>
+
+    <appender name="CONSOLE" class="ch.qos.logback.core.ConsoleAppender">
+        <encoder>
+            <pattern>%d{yyyy-MM-dd HH:mm:ss.SSS} [%thread] %-5level %logger{36} - %msg%n</pattern>
+        </encoder>
+    </appender>
+
+    <appender name="LOKI" class="com.github.loki4j.logback.Loki4jAppender">
+        <http>
+            <url>http://loki:3100/loki/api/v1/push</url>
+        </http>
+        <!-- loki4j 2.x: labels e message vão direto no appender, e os pares
+             de label são separados por QUEBRA DE LINHA. Na 1.x eles ficavam
+             aninhados num elemento format e eram separados por vírgula; esse
+             elemento não existe mais e é ignorado em silêncio, deixando os
+             logs sem label nenhum. Vírgula aqui faz o arranque falhar com
+             "Unable to split ... pairSeparator=regex:" -->
+        <labels>
+            app = ${APP_NAME}
+            level = %level
+        </labels>
+        <readMarkers>true</readMarkers>
+        <message class="ch.qos.logback.classic.PatternLayout">
+            <pattern>
+                {
+                    "date": "%d{yyyy-MM-dd HH:mm:ss.SSS}",
+                    "level": "%level",
+                    "class": "%logger{36}",
+                    "thread": "%thread",
+                    "message": "%message"
+                }
+            </pattern>
+        </message>
+    </appender>
+
+    <root level="INFO">
+        <appender-ref ref="CONSOLE"/>
+        <appender-ref ref="LOKI"/>
+    </root>
+
+</configuration>
