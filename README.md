@@ -64,6 +64,7 @@ Valores monetários são **enviados** como texto no formato brasileiro (`"1.234,
 | `GET` | `/lancamentos/{id}` | busca |
 | `PUT` | `/lancamentos/{id}?escopo=UNICO\|SEGUINTES` | altera só este ou também os próximos da série |
 | `PUT` | `/lancamentos/{id}/realizado` | marca como pago/recebido (só em conta) |
+| `PUT` | `/lancamentos/{id}/fatura` | transfere a compra de cartão para a fatura de outro mês (`{ "ano", "mes" }`), normalmente a próxima; não aceita mês anterior à fatura da compra nem compra já paga |
 | `DELETE` | `/lancamentos/{id}?escopo=UNICO\|SEGUINTES` | apaga só este ou também os próximos (encerra a despesa fixa) |
 
 ### `/movimentacoes`
@@ -77,7 +78,7 @@ Valores monetários são **enviados** como texto no formato brasileiro (`"1.234,
 
 - **Saldo da conta** = saldo inicial + receitas realizadas − despesas realizadas + depósitos e transferências recebidas − saques, transferências enviadas e faturas pagas. Lançamento pendente não conta.
 - **Saldo Geral** soma as contas ativas marcadas com `somaSaldoGeral`; **Saldo Total** soma todas as contas ativas.
-- **Cartão**: a fatura fecha `diasFechamento` dias antes do vencimento. A compra precisa ser **anterior** à data de fechamento para entrar na fatura; no próprio dia já vai para a seguinte. Compra no cartão não mexe em conta: quem debita a conta é o pagamento da fatura, que também marca as compras como realizadas.
+- **Cartão**: a fatura fecha `diasFechamento` dias antes do vencimento. A compra precisa ser **anterior** à data de fechamento para entrar na fatura; no próprio dia já vai para a seguinte. Compra no cartão não mexe em conta: quem debita a conta é o pagamento da fatura, que também marca as compras como realizadas. Uma compra ainda não paga pode ser transferida para uma fatura seguinte; a escolha é mantida mesmo se o lançamento for editado ou o vencimento do cartão mudar.
 - **Despesa fixa** repete todo mês no mesmo dia (dia 31 vira o último dia em meses curtos). As ocorrências são criadas sob demanda, quando o mês é consultado.
 - **Parcelado**: o valor informado é o total; a divisão é em centavos e a sobra vai para a primeira parcela.
 
@@ -86,6 +87,7 @@ Valores monetários são **enviados** como texto no formato brasileiro (`"1.234,
 PostgreSQL, com schema versionado por **Flyway** (migrations em `src/main/resources/db/migration`):
 
 - `V001__Inicial.sql`
+- `V002__fatura_transferida.sql`
 
 > No Spring Boot 4 a autoconfiguração do Flyway passou a viver no módulo `spring-boot-flyway`. Sem essa dependência o Flyway é ignorado **em silêncio**. Ela está declarada no `pom.xml`; não remova.
 

@@ -19,6 +19,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDate;
+import java.time.YearMonth;
 import java.util.List;
 import java.util.Objects;
 import java.util.UUID;
@@ -95,7 +96,7 @@ public class CartaoService {
 
         if (mudouCiclo) {
             List<Lancamento> pendentes = lancamentoRepository.findAllByCartaoAndRealizadoFalse(cartao);
-            pendentes.forEach(l -> l.setFatura(faturaDaCompra(cartao, l)));
+            pendentes.forEach(l -> posicionarNaFatura(l, true));
             lancamentoRepository.saveAll(pendentes);
             log.info("Cartão {}: {} lançamentos pendentes reposicionados nas faturas", id, pendentes.size());
         }
@@ -131,6 +132,30 @@ public class CartaoService {
         }
         cartao.setAtivo(true);
         return cartaoMapper.mapObject(cartaoRepository.save(cartao));
+
+    }
+
+    /**
+     * Põe o lançamento de cartão na fatura certa pelo ciclo atual do cartão.
+     *
+     * <p>Uma compra transferida para uma fatura posterior continua no mês escolhido
+     * (no dia de vencimento atual), desde que ele ainda seja depois da fatura natural
+     * da compra — se a data mudou e passou dele, a escolha perde o sentido e a compra
+     * volta para a natural. Com {@code manterTransferencia} falso (troca de cartão),
+     * vai sempre para a natural.
+     */
+    public void posicionarNaFatura(Lancamento lancamento, boolean manterTransferencia) {
+
+        Cartao cartao = lancamento.getCartao();
+        LocalDate natural = faturaDaCompra(cartao, lancamento);
+
+        if (manterTransferencia && Boolean.TRUE.equals(lancamento.getFaturaTransferida()) && lancamento.getFatura() != null
+                && YearMonth.from(lancamento.getFatura()).isAfter(YearMonth.from(natural))) {
+            lancamento.setFatura(CalendarioUtil.vencimentoNoMes(YearMonth.from(lancamento.getFatura()), cartao.getDiaVencimento()));
+        } else {
+            lancamento.setFatura(natural);
+            lancamento.setFaturaTransferida(false);
+        }
 
     }
 

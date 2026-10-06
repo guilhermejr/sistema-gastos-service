@@ -24,6 +24,7 @@ import org.springframework.transaction.annotation.Transactional;
 import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.time.YearMonth;
+import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Objects;
@@ -117,6 +118,36 @@ public class LancamentoService {
     }
 
     /**
+     * Transfere uma compra de cartão para a fatura de outro mês — tipicamente a próxima,
+     * quando o banco lançou a compra depois do fechamento. Também serve para desfazer:
+     * voltar para a fatura natural tira a marca de transferida. Não aceita uma fatura
+     * anterior à natural, que fechou antes de a compra existir.
+     */
+    @Transactional
+    public LancamentoResponse transferirFatura(Long id, Integer ano, Integer mes) {
+
+        Lancamento lancamento = lancamentoDoUsuario(id);
+        if (lancamento.getCartao() == null) {
+            throw new ExceptionDefault("Só lançamento de cartão de crédito tem fatura.");
+        }
+        exigeNaoPagoEmFatura(lancamento);
+
+        Cartao cartao = lancamento.getCartao();
+        YearMonth destino = converteStringUtil.toYearMonth(ano, mes);
+        YearMonth natural = YearMonth.from(cartaoService.faturaDaCompra(cartao, lancamento));
+        if (destino.isBefore(natural)) {
+            throw new ExceptionDefault("A compra é de " + lancamento.getData().format(DateTimeFormatter.ofPattern("dd/MM/yyyy"))
+                    + " e não pode entrar numa fatura anterior à de " + natural.format(DateTimeFormatter.ofPattern("MM/yyyy")) + ".");
+        }
+
+        lancamento.setFatura(CalendarioUtil.vencimentoNoMes(destino, cartao.getDiaVencimento()));
+        lancamento.setFaturaTransferida(!destino.equals(natural));
+        log.info("Lançamento {} transferido para a fatura {} do cartão {}", id, destino, cartao.getId());
+        return lancamentoMapper.mapObject(lancamentoRepository.save(lancamento));
+
+    }
+
+    /**
      * Apaga um lançamento. Com escopo SEGUINTES, apaga também as próximas ocorrências
      * pendentes da série; numa despesa fixa, a série é encerrada e nada mais é gerado.
      */
@@ -178,14 +209,14 @@ public class LancamentoService {
             lancamento.setConta(conta);
             lancamento.setCartao(null);
             lancamento.setFatura(null);
+            lancamento.setFaturaTransferida(false);
             lancamento.setRealizado(Boolean.TRUE.equals(lancamentoRequest.getRealizado()));
         } else {
-            Cartao cartao = lancamento.getCartao() != null && lancamento.getCartao().getId().equals(lancamentoRequest.getCartaoId())
-                    ? lancamento.getCartao()
-                    : cartaoService.cartaoAtivoDoUsuario(lancamentoRequest.getCartaoId());
+            boolean mesmoCartao = lancamento.getCartao() != null && lancamento.getCartao().getId().equals(lancamentoRequest.getCartaoId());
+            Cartao cartao = mesmoCartao ? lancamento.getCartao() : cartaoService.cartaoAtivoDoUsuario(lancamentoRequest.getCartaoId());
             lancamento.setCartao(cartao);
             lancamento.setConta(null);
-            lancamento.setFatura(cartaoService.faturaDaCompra(cartao, lancamento));
+            cartaoService.posicionarNaFatura(lancamento, mesmoCartao);
             lancamento.setRealizado(false);
         }
 
@@ -272,9 +303,15 @@ public class LancamentoService {
     /** Leva o lançamento para a mesma conta ou cartão do modelo, recalculando a fatura. */
     private void moverPara(Lancamento lancamento, Lancamento modelo) {
 
+        boolean mesmoCartao = modelo.getCartao() != null && modelo.getCartao().equals(lancamento.getCartao());
         lancamento.setConta(modelo.getConta());
         lancamento.setCartao(modelo.getCartao());
-        lancamento.setFatura(modelo.getCartao() == null ? null : cartaoService.faturaDaCompra(modelo.getCartao(), lancamento));
+        if (modelo.getCartao() == null) {
+            lancamento.setFatura(null);
+            lancamento.setFaturaTransferida(false);
+        } else {
+            cartaoService.posicionarNaFatura(lancamento, mesmoCartao);
+        }
 
     }
 

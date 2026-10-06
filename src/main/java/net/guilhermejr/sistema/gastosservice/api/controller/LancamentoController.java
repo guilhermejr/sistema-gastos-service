@@ -3,6 +3,7 @@ package net.guilhermejr.sistema.gastosservice.api.controller;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.log4j.Log4j2;
+import net.guilhermejr.sistema.gastosservice.api.request.FaturaDestinoRequest;
 import net.guilhermejr.sistema.gastosservice.api.request.LancamentoRequest;
 import net.guilhermejr.sistema.gastosservice.api.request.RealizadoRequest;
 import net.guilhermejr.sistema.gastosservice.api.response.LancamentoResponse;
@@ -55,6 +56,16 @@ public class LancamentoController {
 
         log.info("Lançamento {} realizado: {}", id, realizadoRequest.getRealizado());
         return ResponseEntity.status(HttpStatus.OK).body(lancamentoService.alterarRealizado(id, realizadoRequest.getRealizado()));
+
+    }
+
+    /** Muda a compra de cartão de fatura (normalmente para a próxima). */
+    @PutMapping("/{id}/fatura")
+    public ResponseEntity<LancamentoResponse> transferirFatura(@PathVariable Long id, @Valid @RequestBody FaturaDestinoRequest faturaDestinoRequest) {
+
+        log.info("Transferindo lançamento {} para a fatura {}/{}", id, faturaDestinoRequest.getMes(), faturaDestinoRequest.getAno());
+        return ResponseEntity.status(HttpStatus.OK).body(lancamentoService.transferirFatura(id,
+                faturaDestinoRequest.getAno(), faturaDestinoRequest.getMes()));
 
     }
 

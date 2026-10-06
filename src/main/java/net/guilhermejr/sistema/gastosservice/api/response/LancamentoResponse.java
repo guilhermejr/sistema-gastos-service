@@ -24,6 +24,8 @@ public class LancamentoResponse {
     private CartaoResumidoResponse cartao;
     /** Vencimento da fatura, quando é lançamento de cartão. */
     private LocalDate fatura;
+    /** Foi transferida para uma fatura posterior à da data da compra. */
+    private Boolean faturaTransferida;
     private Boolean realizado;
     private Integer parcela;
     private Integer totalParcelas;

@@ -57,6 +57,13 @@ public class Lancamento extends Auditoria implements Serializable {
     /** Vencimento da fatura em que o lançamento entra. Só em cartão. */
     private LocalDate fatura;
 
+    /**
+     * A compra foi transferida à mão para uma fatura posterior à da sua data. Ver
+     * CartaoService.posicionarNaFatura, que respeita a escolha.
+     */
+    @Column(nullable = false)
+    private Boolean faturaTransferida = false;
+
     @Column(nullable = false)
     private Boolean realizado;
 
