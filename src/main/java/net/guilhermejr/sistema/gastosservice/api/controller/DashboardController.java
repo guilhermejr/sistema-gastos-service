@@ -2,8 +2,10 @@ package net.guilhermejr.sistema.gastosservice.api.controller;
 
 import lombok.RequiredArgsConstructor;
 import lombok.extern.log4j.Log4j2;
+import net.guilhermejr.sistema.gastosservice.api.response.AgendaResponse;
 import net.guilhermejr.sistema.gastosservice.api.response.DashboardResponse;
 import net.guilhermejr.sistema.gastosservice.api.response.RelatorioMensalResponse;
+import net.guilhermejr.sistema.gastosservice.domain.enums.TipoLancamento;
 import net.guilhermejr.sistema.gastosservice.service.DashboardService;
 import net.guilhermejr.sistema.gastosservice.service.RelatorioService;
 import org.springframework.http.HttpStatus;
@@ -25,6 +27,22 @@ public class DashboardController {
 
         log.info("Carregando dashboard");
         return ResponseEntity.status(HttpStatus.OK).body(dashboardService.carregar());
+
+    }
+
+    @GetMapping("/agenda/pagar")
+    public ResponseEntity<AgendaResponse> aPagar(@RequestParam(defaultValue = "5") Integer quantidade) {
+
+        log.info("Próximos {} a pagar", quantidade);
+        return ResponseEntity.status(HttpStatus.OK).body(dashboardService.agenda(TipoLancamento.D, quantidade));
+
+    }
+
+    @GetMapping("/agenda/receber")
+    public ResponseEntity<AgendaResponse> aReceber(@RequestParam(defaultValue = "5") Integer quantidade) {
+
+        log.info("Próximos {} a receber", quantidade);
+        return ResponseEntity.status(HttpStatus.OK).body(dashboardService.agenda(TipoLancamento.R, quantidade));
 
     }
 

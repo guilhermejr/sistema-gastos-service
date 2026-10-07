@@ -11,6 +11,8 @@ import net.guilhermejr.sistema.gastosservice.domain.enums.TipoLancamento;
 import net.guilhermejr.sistema.gastosservice.domain.repository.CartaoRepository;
 import net.guilhermejr.sistema.gastosservice.domain.repository.ContaRepository;
 import net.guilhermejr.sistema.gastosservice.domain.repository.LancamentoRepository;
+import net.guilhermejr.sistema.gastosservice.domain.repository.RecorrenciaRepository;
+import net.guilhermejr.sistema.gastosservice.exception.ExceptionDefault;
 import net.guilhermejr.sistema.gastosservice.util.CalendarioUtil;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.stereotype.Service;
@@ -29,11 +31,13 @@ import java.util.stream.Stream;
 public class DashboardService {
 
     private static final int ITENS_AGENDA = 5;
+    private static final int MAXIMO_AGENDA = 100;
 
     private final LancamentoRepository lancamentoRepository;
     private final ContaRepository contaRepository;
     private final CartaoRepository cartaoRepository;
     private final RecorrenciaService recorrenciaService;
+    private final RecorrenciaRepository recorrenciaRepository;
     private final SaldoService saldoService;
     private final FaturaService faturaService;
     private final RelatorioService relatorioService;
@@ -53,7 +57,8 @@ public class DashboardService {
         LocalDate hoje = LocalDate.now(clock);
         YearMonth mes = YearMonth.from(hoje);
 
-        recorrenciaService.gerarAte(usuario, mes.plusMonths(1).atEndOfMonth());
+        LocalDate geradoAte = mes.plusMonths(1).atEndOfMonth();
+        recorrenciaService.gerarAte(usuario, geradoAte);
 
         // Mesma regra do relatório: cartão entra pelo total da fatura que vence no mês.
         RelatorioService.Calculo doMes = relatorioService.calcular(usuario, mes);
@@ -77,9 +82,67 @@ public class DashboardService {
                 .faturas(faturas.stream().map(FaturaResumidaResponse::getTotal).reduce(BigDecimal.ZERO, BigDecimal::add))
                 .contas(contasSaldoGeral.stream().map(c -> contaMapper.mapObject(c, saldos.get(c.getId()))).toList())
                 .cartoes(faturas)
-                .proximosPagar(proximosPagar(usuario, hoje))
-                .proximosReceber(pendentesEmConta(usuario, TipoLancamento.R, hoje).limit(ITENS_AGENDA).toList())
+                .proximosPagar(agenda(usuario, TipoLancamento.D, ITENS_AGENDA, hoje, geradoAte))
+                .proximosReceber(agenda(usuario, TipoLancamento.R, ITENS_AGENDA, hoje, geradoAte))
                 .build();
+
+    }
+
+    /**
+     * Os primeiros itens de "a pagar" (D) ou "a receber" (R) — o card mostra 5 e pede
+     * mais 5 de cada vez, sempre a lista desde o início.
+     */
+    @Transactional
+    public AgendaResponse agenda(TipoLancamento tipo, int quantidade) {
+
+        if (quantidade < 1 || quantidade > MAXIMO_AGENDA) {
+            throw new ExceptionDefault("A quantidade deve estar entre 1 e " + MAXIMO_AGENDA + ".");
+        }
+
+        UUID usuario = authenticationCurrentUserService.getCurrentUser().getId();
+        LocalDate hoje = LocalDate.now(clock);
+        LocalDate geradoAte = YearMonth.from(hoje).plusMonths(1).atEndOfMonth();
+        recorrenciaService.gerarAte(usuario, geradoAte);
+
+        return agenda(usuario, tipo, quantidade, hoje, geradoAte);
+
+    }
+
+    /**
+     * As ocorrências fixas só existem até onde foram geradas, então a lista só está
+     * completa até essa data. Busca um item a mais, para saber se há outros; se ele cai
+     * depois do que já foi gerado, gera até a data dele e busca de novo — o que surgir
+     * cai antes dele, e a segunda busca já fica dentro do gerado. Se faltam itens e há
+     * série ativa, gera meses à frente (uma série mensal dá um item por mês).
+     */
+    private AgendaResponse agenda(UUID usuario, TipoLancamento tipo, int quantidade, LocalDate hoje, LocalDate geradoAte) {
+
+        List<ItemAgendaResponse> itens = itensAgenda(usuario, tipo, quantidade + 1, hoje);
+
+        if (itens.size() <= quantidade && recorrenciaRepository.existsByUsuarioAndAtivoTrue(usuario)) {
+            geradoAte = geradoAte.plusMonths(quantidade + 1L);
+            recorrenciaService.gerarAte(usuario, geradoAte);
+            itens = itensAgenda(usuario, tipo, quantidade + 1, hoje);
+        }
+
+        if (itens.size() > quantidade && itens.get(quantidade).getData().isAfter(geradoAte)) {
+            recorrenciaService.gerarAte(usuario, itens.get(quantidade).getData());
+            itens = itensAgenda(usuario, tipo, quantidade + 1, hoje);
+        }
+
+        boolean temMais = itens.size() > quantidade;
+        return AgendaResponse.builder()
+                .itens(temMais ? itens.subList(0, quantidade) : itens)
+                .temMais(temMais)
+                .build();
+
+    }
+
+    private List<ItemAgendaResponse> itensAgenda(UUID usuario, TipoLancamento tipo, int quantidade, LocalDate hoje) {
+
+        return tipo == TipoLancamento.D
+                ? proximosPagar(usuario, hoje, quantidade)
+                : pendentesEmConta(usuario, TipoLancamento.R, hoje, quantidade).toList();
 
     }
 
@@ -88,9 +151,9 @@ public class DashboardService {
      * atrasados primeiro, porque continuam devidos. Uma compra de cartão entra pela
      * fatura dela, que é como o dinheiro sai da conta.
      */
-    private List<ItemAgendaResponse> proximosPagar(UUID usuario, LocalDate hoje) {
+    private List<ItemAgendaResponse> proximosPagar(UUID usuario, LocalDate hoje, int quantidade) {
 
-        Stream<ItemAgendaResponse> despesas = pendentesEmConta(usuario, TipoLancamento.D, hoje);
+        Stream<ItemAgendaResponse> despesas = pendentesEmConta(usuario, TipoLancamento.D, hoje, quantidade);
 
         Map<Cartao, Map<YearMonth, List<Lancamento>>> porFatura = lancamentoRepository.findPendentesEmCartao(usuario).stream()
                 .collect(Collectors.groupingBy(Lancamento::getCartao,
@@ -112,14 +175,14 @@ public class DashboardService {
 
         return Stream.concat(despesas, faturas)
                 .sorted(Comparator.comparing(ItemAgendaResponse::getData))
-                .limit(ITENS_AGENDA)
+                .limit(quantidade)
                 .toList();
 
     }
 
-    private Stream<ItemAgendaResponse> pendentesEmConta(UUID usuario, TipoLancamento tipo, LocalDate hoje) {
+    private Stream<ItemAgendaResponse> pendentesEmConta(UUID usuario, TipoLancamento tipo, LocalDate hoje, int quantidade) {
 
-        return lancamentoRepository.findPendentesEmConta(usuario, tipo, PageRequest.of(0, ITENS_AGENDA)).stream()
+        return lancamentoRepository.findPendentesEmConta(usuario, tipo, PageRequest.of(0, quantidade)).stream()
                 .map(l -> ItemAgendaResponse.builder()
                         .origem(ItemAgendaResponse.LANCAMENTO)
                         .lancamentoId(l.getId())

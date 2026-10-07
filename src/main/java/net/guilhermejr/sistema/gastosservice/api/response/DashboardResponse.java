@@ -25,7 +25,7 @@ public class DashboardResponse {
     private BigDecimal faturas;
     private List<ContaResponse> contas;
     private List<FaturaResumidaResponse> cartoes;
-    private List<ItemAgendaResponse> proximosPagar;
-    private List<ItemAgendaResponse> proximosReceber;
+    private AgendaResponse proximosPagar;
+    private AgendaResponse proximosReceber;
 
 }

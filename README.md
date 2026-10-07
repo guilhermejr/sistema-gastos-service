@@ -22,7 +22,9 @@ Valores monetários são **enviados** como texto no formato brasileiro (`"1.234,
 
 | Método | Rota | Descrição |
 |---|---|---|
-| `GET` | `/dashboard` | receitas e despesas do mês (mesma regra do relatório: cartão pelo total da fatura que vence no mês), Saldo Geral, Saldo Total, faturas atuais, contas do saldo geral, próximos 5 a pagar e a receber |
+| `GET` | `/dashboard` | receitas e despesas do mês (mesma regra do relatório: cartão pelo total da fatura que vence no mês), Saldo Geral, Saldo Total, faturas atuais, contas do saldo geral, próximos 5 a pagar e a receber (`{ itens, temMais }`) |
+| `GET` | `/agenda/pagar?quantidade=N` | os N primeiros a pagar (despesas em conta e faturas), 1 a 100, com `temMais` |
+| `GET` | `/agenda/receber?quantidade=N` | os N primeiros a receber, 1 a 100, com `temMais` |
 | `GET` | `/relatorios/{ano}/{mes}` | lançamentos em conta do mês e, de cada cartão, só o total da fatura que vence no mês (`faturas`), com totais de entradas e saídas, realizados e pendentes |
 
 ### `/categorias`

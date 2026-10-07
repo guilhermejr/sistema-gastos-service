@@ -27,6 +27,8 @@ public interface RecorrenciaRepository extends JpaRepository<Recorrencia, Long> 
     @Query("SELECT r FROM Recorrencia r WHERE r.usuario = :usuario AND r.ativo = true AND r.geradoAte < :ate")
     List<Recorrencia> findParaGerar(@Param("usuario") UUID usuario, @Param("ate") LocalDate ate);
 
+    boolean existsByUsuarioAndAtivoTrue(UUID usuario);
+
     boolean existsByContaAndAtivoTrue(Conta conta);
 
     boolean existsByCategoria(Categoria categoria);
