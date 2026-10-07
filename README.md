@@ -63,7 +63,7 @@ Valores monetários são **enviados** como texto no formato brasileiro (`"1.234,
 | `POST` | `/lancamentos` | despesa (`D`) ou receita (`R`) em conta **ou** cartão; `repeticao` `UNICA`, `FIXA` ou `PARCELADA` (+ `parcelas`) |
 | `GET` | `/lancamentos/{id}` | busca |
 | `PUT` | `/lancamentos/{id}?escopo=UNICO\|SEGUINTES` | altera só este ou também os próximos da série |
-| `PUT` | `/lancamentos/{id}/realizado` | marca como pago/recebido (só em conta) |
+| `PUT` | `/lancamentos/{id}/realizado` | marca como pago/recebido (só em conta); ao marcar, a data passa a ser a de hoje |
 | `PUT` | `/lancamentos/{id}/fatura` | transfere a compra de cartão para a fatura de outro mês (`{ "ano", "mes" }`), normalmente a próxima; não aceita mês anterior à fatura da compra nem compra já paga |
 | `DELETE` | `/lancamentos/{id}?escopo=UNICO\|SEGUINTES` | apaga só este ou também os próximos (encerra a despesa fixa) |
 

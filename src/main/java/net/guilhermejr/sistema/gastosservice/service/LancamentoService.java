@@ -22,6 +22,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
+import java.time.Clock;
 import java.time.LocalDate;
 import java.time.YearMonth;
 import java.time.format.DateTimeFormatter;
@@ -43,6 +44,7 @@ public class LancamentoService {
     private final LancamentoMapper lancamentoMapper;
     private final ConverteStringUtil converteStringUtil;
     private final AuthenticationCurrentUserService authenticationCurrentUserService;
+    private final Clock clock;
 
     public LancamentoResponse retornarUm(Long id) {
 
@@ -105,12 +107,19 @@ public class LancamentoService {
 
     }
 
+    /**
+     * Marca ou desmarca como pago/recebido. Ao efetivar, a data passa a ser a de hoje,
+     * o dia em que o dinheiro de fato saiu ou entrou. Desmarcar não devolve a data antiga.
+     */
     @Transactional
     public LancamentoResponse alterarRealizado(Long id, boolean realizado) {
 
         Lancamento lancamento = lancamentoDoUsuario(id);
         if (lancamento.getCartao() != null) {
             throw new ExceptionDefault("Lançamento de cartão é realizado pelo pagamento da fatura.");
+        }
+        if (realizado && !Boolean.TRUE.equals(lancamento.getRealizado())) {
+            lancamento.setData(LocalDate.now(clock));
         }
         lancamento.setRealizado(realizado);
         return lancamentoMapper.mapObject(lancamentoRepository.save(lancamento));
