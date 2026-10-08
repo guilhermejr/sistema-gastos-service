@@ -29,5 +29,10 @@ public class RelatorioMensalResponse {
     private List<LancamentoResponse> lancamentos;
     /** Faturas com vencimento no ciclo, uma por cartão, com o total de cada uma. */
     private List<FaturaResumidaResponse> faturas;
+    /**
+     * Transferências entre contas no ciclo, só para consulta: não entram em entradas,
+     * saídas nem saldos (o dinheiro só muda de conta).
+     */
+    private List<MovimentacaoResponse> transferencias;
 
 }

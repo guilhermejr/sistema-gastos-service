@@ -3,13 +3,16 @@ package net.guilhermejr.sistema.gastosservice.service;
 import lombok.RequiredArgsConstructor;
 import net.guilhermejr.seguranca.jwt.AuthenticationCurrentUserService;
 import net.guilhermejr.sistema.gastosservice.api.mapper.LancamentoMapper;
+import net.guilhermejr.sistema.gastosservice.api.mapper.MovimentacaoMapper;
 import net.guilhermejr.sistema.gastosservice.api.response.FaturaResumidaResponse;
 import net.guilhermejr.sistema.gastosservice.api.response.RelatorioMensalResponse;
 import net.guilhermejr.sistema.gastosservice.api.response.TotaisResponse;
 import net.guilhermejr.sistema.gastosservice.domain.entity.Cartao;
 import net.guilhermejr.sistema.gastosservice.domain.entity.Lancamento;
 import net.guilhermejr.sistema.gastosservice.domain.enums.TipoLancamento;
+import net.guilhermejr.sistema.gastosservice.domain.enums.TipoMovimentacao;
 import net.guilhermejr.sistema.gastosservice.domain.repository.LancamentoRepository;
+import net.guilhermejr.sistema.gastosservice.domain.repository.MovimentacaoRepository;
 import net.guilhermejr.sistema.gastosservice.util.Ciclo;
 import net.guilhermejr.sistema.gastosservice.util.ConverteStringUtil;
 import org.springframework.stereotype.Service;
@@ -35,7 +38,8 @@ import java.util.stream.Collectors;
  *   realizado e o resto como pendente. Estornos no cartão já vêm descontados do total.</li>
  * </ul>
  * Transferências, depósitos, saques e o pagamento da fatura (a movimentação) não
- * entram — não são receita nem despesa, e o pagamento contaria a fatura duas vezes.
+ * entram nos totais — não são receita nem despesa, e o pagamento contaria a fatura duas
+ * vezes. As transferências do ciclo vêm à parte em {@code transferencias}, só para consulta.
  */
 @RequiredArgsConstructor
 @Service
@@ -46,6 +50,8 @@ public class RelatorioService {
     private final FaturaService faturaService;
     private final ConfiguracaoService configuracaoService;
     private final LancamentoMapper lancamentoMapper;
+    private final MovimentacaoRepository movimentacaoRepository;
+    private final MovimentacaoMapper movimentacaoMapper;
     private final ConverteStringUtil converteStringUtil;
     private final AuthenticationCurrentUserService authenticationCurrentUserService;
 
@@ -76,6 +82,8 @@ public class RelatorioService {
                 .saldoPrevisto(entradas.getTotal().subtract(saidas.getTotal()))
                 .lancamentos(lancamentoMapper.mapList(calculo.emConta()))
                 .faturas(calculo.faturas())
+                .transferencias(movimentacaoMapper.mapList(movimentacaoRepository
+                        .findAllByUsuarioAndTipoAndDataBetweenOrderByDataAscIdAsc(usuario, TipoMovimentacao.TRANSFERENCIA, ciclo.inicio(), ciclo.fim())))
                 .build();
 
     }

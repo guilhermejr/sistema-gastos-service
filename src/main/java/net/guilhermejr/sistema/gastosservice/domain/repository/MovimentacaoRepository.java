@@ -3,6 +3,7 @@ package net.guilhermejr.sistema.gastosservice.domain.repository;
 import net.guilhermejr.sistema.gastosservice.domain.entity.Cartao;
 import net.guilhermejr.sistema.gastosservice.domain.entity.Conta;
 import net.guilhermejr.sistema.gastosservice.domain.entity.Movimentacao;
+import net.guilhermejr.sistema.gastosservice.domain.enums.TipoMovimentacao;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
@@ -29,6 +30,9 @@ public interface MovimentacaoRepository extends JpaRepository<Movimentacao, Long
             + "AND m.data BETWEEN :inicio AND :fim ORDER BY m.data ASC, m.id ASC")
     List<Movimentacao> findDaContaNoPeriodo(@Param("usuario") UUID usuario, @Param("conta") Conta conta,
                                             @Param("inicio") LocalDate inicio, @Param("fim") LocalDate fim);
+
+    List<Movimentacao> findAllByUsuarioAndTipoAndDataBetweenOrderByDataAscIdAsc(UUID usuario, TipoMovimentacao tipo,
+                                                                              LocalDate inicio, LocalDate fim);
 
     /** [contaId, soma] do que entrou em cada conta. */
     @Query("SELECT m.contaDestino.id, SUM(m.valor) FROM Movimentacao m WHERE m.usuario = :usuario "
