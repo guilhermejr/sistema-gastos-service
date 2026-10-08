@@ -1,5 +1,6 @@
 package net.guilhermejr.sistema.gastosservice.api.request;
 
+import jakarta.validation.Valid;
 import jakarta.validation.constraints.*;
 import lombok.*;
 import net.guilhermejr.sistema.gastosservice.api.request.validation.constraints.DataBrasil;
@@ -51,5 +52,13 @@ public class LancamentoRequest {
     @Min(2)
     @Max(120)
     private Integer parcelas;
+
+    /**
+     * Só na inclusão em cartão: a fatura escolhida, quando não é a da data da compra.
+     * Numa compra parcelada, todas as parcelas andam os mesmos meses; numa fixa, só a
+     * primeira ocorrência.
+     */
+    @Valid
+    private FaturaDestinoRequest fatura;
 
 }

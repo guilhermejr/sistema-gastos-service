@@ -58,7 +58,7 @@ public class Lancamento extends Auditoria implements Serializable {
     private LocalDate fatura;
 
     /**
-     * A compra foi transferida à mão para uma fatura posterior à da sua data. Ver
+     * A compra foi posta à mão numa fatura que não é a da sua data. Ver
      * CartaoService.posicionarNaFatura, que respeita a escolha.
      */
     @Column(nullable = false)

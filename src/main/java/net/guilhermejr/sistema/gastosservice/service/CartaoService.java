@@ -20,6 +20,7 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDate;
 import java.time.YearMonth;
+import java.time.format.DateTimeFormatter;
 import java.util.List;
 import java.util.Objects;
 import java.util.UUID;
@@ -136,13 +137,34 @@ public class CartaoService {
     }
 
     /**
+     * Põe a compra de cartão, à mão, na fatura que vence em {@code destino}. Vale qualquer
+     * fatura posterior à natural da compra e também a imediatamente anterior — para quando
+     * o banco fecha a fatura depois do previsto e a compra ainda entra nela. Antes disso,
+     * não: a fatura fechou antes de a compra existir. Escolher a natural tira a marca de
+     * transferida.
+     */
+    public void transferirParaFatura(Lancamento lancamento, YearMonth destino) {
+
+        Cartao cartao = lancamento.getCartao();
+        YearMonth natural = YearMonth.from(faturaDaCompra(cartao, lancamento));
+        if (!aceitaFatura(natural, destino)) {
+            throw new ExceptionDefault("A compra é de " + lancamento.getData().format(DateTimeFormatter.ofPattern("dd/MM/yyyy"))
+                    + " e não pode entrar numa fatura anterior à de "
+                    + natural.minusMonths(1).format(DateTimeFormatter.ofPattern("MM/yyyy")) + ".");
+        }
+
+        lancamento.setFatura(CalendarioUtil.vencimentoNoMes(destino, cartao.getDiaVencimento()));
+        lancamento.setFaturaTransferida(!destino.equals(natural));
+
+    }
+
+    /**
      * Põe o lançamento de cartão na fatura certa pelo ciclo atual do cartão.
      *
-     * <p>Uma compra transferida para uma fatura posterior continua no mês escolhido
-     * (no dia de vencimento atual), desde que ele ainda seja depois da fatura natural
-     * da compra — se a data mudou e passou dele, a escolha perde o sentido e a compra
-     * volta para a natural. Com {@code manterTransferencia} falso (troca de cartão),
-     * vai sempre para a natural.
+     * <p>Uma compra transferida continua no mês escolhido (no dia de vencimento atual),
+     * desde que ele ainda seja aceito para a fatura natural da compra — se a data mudou e
+     * a escolha ficou para trás, ela perde o sentido e a compra volta para a natural. Com
+     * {@code manterTransferencia} falso (troca de cartão), vai sempre para a natural.
      */
     public void posicionarNaFatura(Lancamento lancamento, boolean manterTransferencia) {
 
@@ -150,7 +172,8 @@ public class CartaoService {
         LocalDate natural = faturaDaCompra(cartao, lancamento);
 
         if (manterTransferencia && Boolean.TRUE.equals(lancamento.getFaturaTransferida()) && lancamento.getFatura() != null
-                && YearMonth.from(lancamento.getFatura()).isAfter(YearMonth.from(natural))) {
+                && !YearMonth.from(lancamento.getFatura()).equals(YearMonth.from(natural))
+                && aceitaFatura(YearMonth.from(natural), YearMonth.from(lancamento.getFatura()))) {
             lancamento.setFatura(CalendarioUtil.vencimentoNoMes(YearMonth.from(lancamento.getFatura()), cartao.getDiaVencimento()));
         } else {
             lancamento.setFatura(natural);
@@ -162,6 +185,11 @@ public class CartaoService {
     /** Vencimento da fatura em que o lançamento entra, pelo ciclo atual do cartão. */
     public LocalDate faturaDaCompra(Cartao cartao, Lancamento lancamento) {
         return CalendarioUtil.vencimentoDaCompra(lancamento.getData(), cartao.getDiaVencimento(), cartao.getDiasFechamento());
+    }
+
+    /** Uma compra pode ir para qualquer fatura a partir da anterior à sua natural. */
+    private static boolean aceitaFatura(YearMonth natural, YearMonth destino) {
+        return !destino.isBefore(natural.minusMonths(1));
     }
 
     /** Cartão do usuário e ativo — o que se exige para lançar nele. */

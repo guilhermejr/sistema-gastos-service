@@ -25,7 +25,7 @@ import java.math.BigDecimal;
 import java.time.Clock;
 import java.time.LocalDate;
 import java.time.YearMonth;
-import java.time.format.DateTimeFormatter;
+import java.time.temporal.ChronoUnit;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Objects;
@@ -63,14 +63,20 @@ public class LancamentoService {
         Lancamento base = montar(new Lancamento(), lancamentoRequest);
         base.setUsuario(usuario());
 
+        long mesesNaFatura = mesesAteFaturaEscolhida(base, lancamentoRequest);
+
         Repeticao repeticao = Objects.requireNonNullElse(lancamentoRequest.getRepeticao(), Repeticao.UNICA);
         List<Lancamento> criados = switch (repeticao) {
-            case UNICA -> List.of(lancamentoRepository.save(base));
-            case FIXA -> {
-                base.setRecorrencia(recorrenciaService.criar(base));
+            case UNICA -> {
+                deslocarFatura(base, mesesNaFatura);
                 yield List.of(lancamentoRepository.save(base));
             }
-            case PARCELADA -> lancamentoRepository.saveAll(parcelar(base, lancamentoRequest.getParcelas()));
+            case FIXA -> {
+                base.setRecorrencia(recorrenciaService.criar(base));
+                deslocarFatura(base, mesesNaFatura);
+                yield List.of(lancamentoRepository.save(base));
+            }
+            case PARCELADA -> lancamentoRepository.saveAll(parcelar(base, lancamentoRequest.getParcelas(), mesesNaFatura));
         };
 
         log.info("{} lançamento(s) incluído(s): {} {}", criados.size(), repeticao, base.getDescricao());
@@ -128,9 +134,9 @@ public class LancamentoService {
 
     /**
      * Transfere uma compra de cartão para a fatura de outro mês — tipicamente a próxima,
-     * quando o banco lançou a compra depois do fechamento. Também serve para desfazer:
-     * voltar para a fatura natural tira a marca de transferida. Não aceita uma fatura
-     * anterior à natural, que fechou antes de a compra existir.
+     * quando o banco lançou a compra depois do fechamento, ou a anterior, quando ainda
+     * entrou nela. Também serve para desfazer: voltar para a fatura natural tira a marca
+     * de transferida. Ver CartaoService.transferirParaFatura.
      */
     @Transactional
     public LancamentoResponse transferirFatura(Long id, Integer ano, Integer mes) {
@@ -141,17 +147,9 @@ public class LancamentoService {
         }
         exigeNaoPagoEmFatura(lancamento);
 
-        Cartao cartao = lancamento.getCartao();
         YearMonth destino = converteStringUtil.toYearMonth(ano, mes);
-        YearMonth natural = YearMonth.from(cartaoService.faturaDaCompra(cartao, lancamento));
-        if (destino.isBefore(natural)) {
-            throw new ExceptionDefault("A compra é de " + lancamento.getData().format(DateTimeFormatter.ofPattern("dd/MM/yyyy"))
-                    + " e não pode entrar numa fatura anterior à de " + natural.format(DateTimeFormatter.ofPattern("MM/yyyy")) + ".");
-        }
-
-        lancamento.setFatura(CalendarioUtil.vencimentoNoMes(destino, cartao.getDiaVencimento()));
-        lancamento.setFaturaTransferida(!destino.equals(natural));
-        log.info("Lançamento {} transferido para a fatura {} do cartão {}", id, destino, cartao.getId());
+        cartaoService.transferirParaFatura(lancamento, destino);
+        log.info("Lançamento {} transferido para a fatura {} do cartão {}", id, destino, lancamento.getCartao().getId());
         return lancamentoMapper.mapObject(lancamentoRepository.save(lancamento));
 
     }
@@ -234,10 +232,36 @@ public class LancamentoService {
     }
 
     /**
-     * Uma parcela por mês, no mesmo dia da compra. Só a primeira pode nascer realizada;
-     * em cartão, cada parcela cai na fatura do seu mês.
+     * Quantos meses a fatura escolhida na inclusão fica da fatura natural da compra
+     * (negativo = antes). Zero quando não foi escolhida ou o lançamento é em conta.
      */
-    private List<Lancamento> parcelar(Lancamento base, Integer quantidade) {
+    private long mesesAteFaturaEscolhida(Lancamento lancamento, LancamentoRequest lancamentoRequest) {
+
+        if (lancamento.getCartao() == null || lancamentoRequest.getFatura() == null) {
+            return 0;
+        }
+        YearMonth destino = converteStringUtil.toYearMonth(lancamentoRequest.getFatura().getAno(), lancamentoRequest.getFatura().getMes());
+        YearMonth natural = YearMonth.from(cartaoService.faturaDaCompra(lancamento.getCartao(), lancamento));
+        return natural.until(destino, ChronoUnit.MONTHS);
+
+    }
+
+    /** Leva a compra de cartão para a fatura {@code meses} depois da sua natural. */
+    private void deslocarFatura(Lancamento lancamento, long meses) {
+
+        if (meses != 0) {
+            YearMonth natural = YearMonth.from(cartaoService.faturaDaCompra(lancamento.getCartao(), lancamento));
+            cartaoService.transferirParaFatura(lancamento, natural.plusMonths(meses));
+        }
+
+    }
+
+    /**
+     * Uma parcela por mês, no mesmo dia da compra. Só a primeira pode nascer realizada;
+     * em cartão, cada parcela cai na fatura do seu mês, deslocada pelos mesmos
+     * {@code mesesNaFatura} quando a fatura da primeira foi escolhida à mão.
+     */
+    private List<Lancamento> parcelar(Lancamento base, Integer quantidade, long mesesNaFatura) {
 
         if (quantidade == null || quantidade < 2) {
             throw new ExceptionDefault("Informe em quantas parcelas (2 ou mais).");
@@ -257,6 +281,8 @@ public class LancamentoService {
             parcela.setData(CalendarioUtil.mesesDepois(base.getData(), dia, i));
             if (parcela.getCartao() != null) {
                 parcela.setFatura(cartaoService.faturaDaCompra(parcela.getCartao(), parcela));
+                parcela.setFaturaTransferida(false);
+                deslocarFatura(parcela, mesesNaFatura);
             }
             if (i > 0) {
                 parcela.setRealizado(false);
