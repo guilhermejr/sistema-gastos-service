@@ -22,6 +22,9 @@ public interface MovimentacaoRepository extends JpaRepository<Movimentacao, Long
     /** Pagamentos de uma fatura, pelo mês do vencimento (ver LancamentoRepository). */
     List<Movimentacao> findAllByCartaoAndFaturaBetweenOrderByDataAscIdAsc(Cartao cartao, LocalDate inicio, LocalDate fim);
 
+    /** A fatura do mês já recebeu algum pagamento (mesmo parcial, enquanto não estornado). */
+    boolean existsByCartaoAndFaturaBetween(Cartao cartao, LocalDate inicio, LocalDate fim);
+
     @Query("SELECT m FROM Movimentacao m WHERE m.usuario = :usuario AND (m.contaOrigem = :conta OR m.contaDestino = :conta) "
             + "AND m.data BETWEEN :inicio AND :fim ORDER BY m.data ASC, m.id ASC")
     List<Movimentacao> findDaContaNoPeriodo(@Param("usuario") UUID usuario, @Param("conta") Conta conta,

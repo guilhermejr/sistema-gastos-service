@@ -55,7 +55,7 @@ Valores monetários são **enviados** como texto no formato brasileiro (`"1.234,
 | `GET` / `PUT` | `/cartoes/{id}` | busca, altera |
 | `PUT` | `/cartoes/{id}/desativar` / `ativar` | tira ou devolve ao uso |
 | `GET` | `/cartoes/{id}/faturas/atual` | fatura que recebe uma compra feita hoje |
-| `GET` | `/cartoes/{id}/faturas/{ano}/{mes}` | fatura com vencimento no mês |
+| `GET` | `/cartoes/{id}/faturas/{ano}/{mes}` | fatura com vencimento no mês (`anteriorPaga` diz se a do mês anterior já recebeu pagamento) |
 | `POST` | `/cartoes/{id}/faturas/{ano}/{mes}/pagamento` | paga o pendente (`contaId` e `data` opcionais) |
 
 ### `/lancamentos`
@@ -66,7 +66,7 @@ Valores monetários são **enviados** como texto no formato brasileiro (`"1.234,
 | `GET` | `/lancamentos/{id}` | busca |
 | `PUT` | `/lancamentos/{id}?escopo=UNICO\|SEGUINTES` | altera só este ou também os próximos da série |
 | `PUT` | `/lancamentos/{id}/realizado` | marca como pago/recebido (só em conta); ao marcar, a data passa a ser a de hoje |
-| `PUT` | `/lancamentos/{id}/fatura` | transfere a compra de cartão para a fatura de outro mês (`{ "ano", "mes" }`), normalmente a próxima; aceita até a fatura anterior à da compra, nunca antes, nem compra já paga |
+| `PUT` | `/lancamentos/{id}/fatura` | transfere a compra de cartão para a fatura de outro mês (`{ "ano", "mes" }`), normalmente a próxima; aceita até a fatura anterior à da compra, nunca antes, nem compra já paga; não leva para uma fatura anterior que já recebeu pagamento |
 | `DELETE` | `/lancamentos/{id}?escopo=UNICO\|SEGUINTES` | apaga só este ou também os próximos (encerra a despesa fixa) |
 
 ### `/movimentacoes`
@@ -80,7 +80,7 @@ Valores monetários são **enviados** como texto no formato brasileiro (`"1.234,
 
 - **Saldo da conta** = saldo inicial + receitas realizadas − despesas realizadas + depósitos e transferências recebidas − saques, transferências enviadas e faturas pagas. Lançamento pendente não conta.
 - **Saldo Geral** soma as contas ativas marcadas com `somaSaldoGeral`; **Saldo Total** soma todas as contas ativas.
-- **Cartão**: a fatura fecha `diasFechamento` dias antes do vencimento. A compra precisa ser **anterior** à data de fechamento para entrar na fatura; no próprio dia já vai para a seguinte. Compra no cartão não mexe em conta: quem debita a conta é o pagamento da fatura, que também marca as compras como realizadas. Uma compra ainda não paga pode ir para uma fatura seguinte ou para a imediatamente anterior — na inclusão ou depois; a escolha é mantida mesmo se o lançamento for editado ou o vencimento do cartão mudar.
+- **Cartão**: a fatura fecha `diasFechamento` dias antes do vencimento. A compra precisa ser **anterior** à data de fechamento para entrar na fatura; no próprio dia já vai para a seguinte. Compra no cartão não mexe em conta: quem debita a conta é o pagamento da fatura, que também marca as compras como realizadas. Uma compra ainda não paga pode ir para uma fatura seguinte ou para a imediatamente anterior, desde que essa não tenha sido paga — na inclusão ou depois; a escolha é mantida mesmo se o lançamento for editado ou o vencimento do cartão mudar.
 - **Relatório mensal**: lançamentos em conta pela data; cartão de crédito só pelo total de cada fatura, na data de vencimento. O que já foi pago da fatura conta como realizado.
 - **Despesa fixa** repete todo mês no mesmo dia (dia 31 vira o último dia em meses curtos). As ocorrências são criadas sob demanda, quando o mês é consultado.
 - **Parcelado**: o valor informado é o total; a divisão é em centavos e a sobra vai para a primeira parcela.

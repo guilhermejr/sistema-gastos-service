@@ -11,6 +11,7 @@ import net.guilhermejr.sistema.gastosservice.domain.entity.Conta;
 import net.guilhermejr.sistema.gastosservice.domain.entity.Lancamento;
 import net.guilhermejr.sistema.gastosservice.domain.repository.CartaoRepository;
 import net.guilhermejr.sistema.gastosservice.domain.repository.LancamentoRepository;
+import net.guilhermejr.sistema.gastosservice.domain.repository.MovimentacaoRepository;
 import net.guilhermejr.sistema.gastosservice.domain.repository.RecorrenciaRepository;
 import net.guilhermejr.sistema.gastosservice.exception.ExceptionDefault;
 import net.guilhermejr.sistema.gastosservice.exception.ExceptionNotFound;
@@ -32,6 +33,7 @@ public class CartaoService {
 
     private final CartaoRepository cartaoRepository;
     private final LancamentoRepository lancamentoRepository;
+    private final MovimentacaoRepository movimentacaoRepository;
     private final RecorrenciaRepository recorrenciaRepository;
     private final ContaService contaService;
     private final CartaoMapper cartaoMapper;
@@ -142,6 +144,9 @@ public class CartaoService {
      * o banco fecha a fatura depois do previsto e a compra ainda entra nela. Antes disso,
      * não: a fatura fechou antes de a compra existir. Escolher a natural tira a marca de
      * transferida.
+     *
+     * <p>Levar para uma fatura anterior à que a compra está só vale se ela ainda não foi
+     * paga: o pagamento debitou da conta o que a fatura tinha, e a compra ficaria de fora.
      */
     public void transferirParaFatura(Lancamento lancamento, YearMonth destino) {
 
@@ -151,6 +156,11 @@ public class CartaoService {
             throw new ExceptionDefault("A compra é de " + lancamento.getData().format(DateTimeFormatter.ofPattern("dd/MM/yyyy"))
                     + " e não pode entrar numa fatura anterior à de "
                     + natural.minusMonths(1).format(DateTimeFormatter.ofPattern("MM/yyyy")) + ".");
+        }
+        YearMonth atual = lancamento.getFatura() == null ? natural : YearMonth.from(lancamento.getFatura());
+        if (destino.isBefore(atual) && faturaPaga(cartao, destino)) {
+            throw new ExceptionDefault("A fatura de " + destino.format(DateTimeFormatter.ofPattern("MM/yyyy"))
+                    + " já foi paga. Estorne o pagamento dela antes de levar a compra para lá.");
         }
 
         lancamento.setFatura(CalendarioUtil.vencimentoNoMes(destino, cartao.getDiaVencimento()));
@@ -185,6 +195,11 @@ public class CartaoService {
     /** Vencimento da fatura em que o lançamento entra, pelo ciclo atual do cartão. */
     public LocalDate faturaDaCompra(Cartao cartao, Lancamento lancamento) {
         return CalendarioUtil.vencimentoDaCompra(lancamento.getData(), cartao.getDiaVencimento(), cartao.getDiasFechamento());
+    }
+
+    /** A fatura do mês já recebeu pagamento (mesmo parcial). */
+    public boolean faturaPaga(Cartao cartao, YearMonth mes) {
+        return movimentacaoRepository.existsByCartaoAndFaturaBetween(cartao, mes.atDay(1), mes.atEndOfMonth());
     }
 
     /** Uma compra pode ir para qualquer fatura a partir da anterior à sua natural. */

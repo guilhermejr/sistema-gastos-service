@@ -25,5 +25,7 @@ public class FaturaResponse {
     private BigDecimal pendente;
     private List<LancamentoResponse> lancamentos;
     private List<MovimentacaoResponse> pagamentos;
+    /** A fatura do mês anterior já foi paga: nenhuma compra pode voltar para ela. */
+    private Boolean anteriorPaga;
 
 }

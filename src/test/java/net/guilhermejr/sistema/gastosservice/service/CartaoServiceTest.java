@@ -6,6 +6,7 @@ import net.guilhermejr.sistema.gastosservice.domain.entity.Cartao;
 import net.guilhermejr.sistema.gastosservice.domain.entity.Lancamento;
 import net.guilhermejr.sistema.gastosservice.domain.repository.CartaoRepository;
 import net.guilhermejr.sistema.gastosservice.domain.repository.LancamentoRepository;
+import net.guilhermejr.sistema.gastosservice.domain.repository.MovimentacaoRepository;
 import net.guilhermejr.sistema.gastosservice.domain.repository.RecorrenciaRepository;
 import net.guilhermejr.sistema.gastosservice.exception.ExceptionDefault;
 import org.junit.jupiter.api.Assertions;
@@ -24,13 +25,15 @@ public class CartaoServiceTest {
     private static final YearMonth NATURAL = YearMonth.of(2026, 11);
 
     private CartaoService cartaoService;
+    private MovimentacaoRepository movimentacaoRepository;
     private Lancamento lancamento;
 
     @BeforeEach
     public void preparar() {
 
+        movimentacaoRepository = Mockito.mock(MovimentacaoRepository.class);
         cartaoService = new CartaoService(Mockito.mock(CartaoRepository.class), Mockito.mock(LancamentoRepository.class),
-                Mockito.mock(RecorrenciaRepository.class), Mockito.mock(ContaService.class), Mockito.mock(CartaoMapper.class),
+                movimentacaoRepository, Mockito.mock(RecorrenciaRepository.class), Mockito.mock(ContaService.class), Mockito.mock(CartaoMapper.class),
                 Mockito.mock(AuthenticationCurrentUserService.class));
 
         Cartao cartao = new Cartao();
@@ -108,6 +111,47 @@ public class CartaoServiceTest {
 
         Assertions.assertEquals(LocalDate.of(2026, 12, 10), lancamento.getFatura());
         Assertions.assertFalse(lancamento.getFaturaTransferida());
+
+    }
+
+    private void faturaPaga(YearMonth mes) {
+        Mockito.when(movimentacaoRepository.existsByCartaoAndFaturaBetween(Mockito.any(), Mockito.eq(mes.atDay(1)), Mockito.eq(mes.atEndOfMonth())))
+                .thenReturn(true);
+    }
+
+    @Test
+    @DisplayName("Recusa levar para a fatura anterior já paga")
+    public void recusa_fatura_anterior_paga() {
+
+        faturaPaga(NATURAL.minusMonths(1));
+
+        ExceptionDefault erro = Assertions.assertThrows(ExceptionDefault.class,
+                () -> cartaoService.transferirParaFatura(lancamento, NATURAL.minusMonths(1)));
+        Assertions.assertTrue(erro.getMessage().contains("já foi paga"));
+        Assertions.assertEquals(LocalDate.of(2026, 11, 10), lancamento.getFatura());
+
+    }
+
+    @Test
+    @DisplayName("Recusa voltar uma compra transferida para a fatura já paga")
+    public void recusa_voltar_para_fatura_paga() {
+
+        cartaoService.transferirParaFatura(lancamento, NATURAL.plusMonths(1));
+        faturaPaga(NATURAL);
+
+        Assertions.assertThrows(ExceptionDefault.class, () -> cartaoService.transferirParaFatura(lancamento, NATURAL));
+        Assertions.assertEquals(LocalDate.of(2026, 12, 10), lancamento.getFatura());
+
+    }
+
+    @Test
+    @DisplayName("Levar para a frente não olha se a fatura foi paga")
+    public void levar_para_frente_ignora_pagamento() {
+
+        faturaPaga(NATURAL.plusMonths(1));
+        cartaoService.transferirParaFatura(lancamento, NATURAL.plusMonths(1));
+
+        Assertions.assertEquals(LocalDate.of(2026, 12, 10), lancamento.getFatura());
 
     }
 

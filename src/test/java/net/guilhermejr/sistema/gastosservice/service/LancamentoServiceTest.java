@@ -12,6 +12,7 @@ import net.guilhermejr.sistema.gastosservice.domain.enums.Repeticao;
 import net.guilhermejr.sistema.gastosservice.domain.enums.TipoLancamento;
 import net.guilhermejr.sistema.gastosservice.domain.repository.CartaoRepository;
 import net.guilhermejr.sistema.gastosservice.domain.repository.LancamentoRepository;
+import net.guilhermejr.sistema.gastosservice.domain.repository.MovimentacaoRepository;
 import net.guilhermejr.sistema.gastosservice.domain.repository.RecorrenciaRepository;
 import net.guilhermejr.sistema.gastosservice.exception.ExceptionDefault;
 import net.guilhermejr.sistema.gastosservice.util.ConverteStringUtil;
@@ -37,6 +38,7 @@ public class LancamentoServiceTest {
 
     private LancamentoRepository lancamentoRepository;
     private LancamentoService lancamentoService;
+    private MovimentacaoRepository movimentacaoRepository;
 
     @BeforeEach
     public void preparar() {
@@ -113,7 +115,8 @@ public class LancamentoServiceTest {
         Mockito.when(cartaoRepository.findByIdAndUsuario(Mockito.eq(5L), Mockito.any())).thenReturn(Optional.of(cartao));
 
         AuthenticationCurrentUserService usuario = Mockito.mock(AuthenticationCurrentUserService.class, Answers.RETURNS_DEEP_STUBS);
-        CartaoService cartaoService = new CartaoService(cartaoRepository, lancamentoRepository, Mockito.mock(RecorrenciaRepository.class),
+        movimentacaoRepository = Mockito.mock(MovimentacaoRepository.class);
+        CartaoService cartaoService = new CartaoService(cartaoRepository, lancamentoRepository, movimentacaoRepository, Mockito.mock(RecorrenciaRepository.class),
                 Mockito.mock(ContaService.class), Mockito.mock(CartaoMapper.class), usuario);
         CategoriaService categoriaService = Mockito.mock(CategoriaService.class);
         Mockito.when(categoriaService.categoriaParaLancamento(Mockito.any(), Mockito.any())).thenReturn(new Categoria());
@@ -167,6 +170,19 @@ public class LancamentoServiceTest {
 
         LancamentoService servico = comCartao();
         Assertions.assertThrows(ExceptionDefault.class, () -> servico.inserir(compraNoCartao(Repeticao.UNICA, null, 2026, 9)));
+        Mockito.verify(lancamentoRepository, Mockito.never()).save(Mockito.any());
+
+    }
+
+    @Test
+    @DisplayName("Inclusão em cartão recusa a fatura anterior já paga")
+    public void inclusao_recusa_fatura_anterior_paga() {
+
+        LancamentoService servico = comCartao();
+        Mockito.when(movimentacaoRepository.existsByCartaoAndFaturaBetween(Mockito.any(),
+                Mockito.eq(LocalDate.of(2026, 10, 1)), Mockito.eq(LocalDate.of(2026, 10, 31)))).thenReturn(true);
+
+        Assertions.assertThrows(ExceptionDefault.class, () -> servico.inserir(compraNoCartao(Repeticao.UNICA, null, 2026, 10)));
         Mockito.verify(lancamentoRepository, Mockito.never()).save(Mockito.any());
 
     }

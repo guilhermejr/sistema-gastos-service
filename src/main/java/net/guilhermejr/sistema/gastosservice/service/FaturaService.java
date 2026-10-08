@@ -183,6 +183,7 @@ public class FaturaService {
                 .pendente(pendente)
                 .lancamentos(lancamentoMapper.mapList(lancamentos))
                 .pagamentos(movimentacaoMapper.mapList(pagamentos))
+                .anteriorPaga(cartaoService.faturaPaga(cartao, mes.minusMonths(1)))
                 .build();
 
     }
