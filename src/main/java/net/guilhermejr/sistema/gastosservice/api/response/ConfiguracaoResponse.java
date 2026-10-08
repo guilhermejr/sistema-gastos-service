@@ -11,5 +11,7 @@ import lombok.*;
 public class ConfiguracaoResponse {
 
     private Integer diaInicioCiclo;
+    private Long despesaContaId;
+    private Long despesaCartaoId;
 
 }

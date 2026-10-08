@@ -19,4 +19,8 @@ public class ConfiguracaoRequest {
     @Max(28)
     private Integer diaInicioCiclo;
 
+    /** Conta ou cartão que já vem escolhido numa despesa nova: no máximo um; nenhum = automático. */
+    private Long despesaContaId;
+    private Long despesaCartaoId;
+
 }

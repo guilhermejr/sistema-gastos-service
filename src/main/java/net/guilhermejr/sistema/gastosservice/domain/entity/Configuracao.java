@@ -26,6 +26,14 @@ public class Configuracao extends Auditoria implements Serializable {
     @Column(nullable = false)
     private Integer diaInicioCiclo;
 
+    /** Conta já escolhida ao incluir uma despesa; no máximo uma das duas (conta ou cartão). */
+    @ManyToOne
+    private Conta despesaConta;
+
+    /** Cartão já escolhido ao incluir uma despesa. */
+    @ManyToOne
+    private Cartao despesaCartao;
+
     public static Configuracao padrao() {
         Configuracao configuracao = new Configuracao();
         configuracao.setDiaInicioCiclo(1);

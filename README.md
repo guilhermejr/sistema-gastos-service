@@ -31,8 +31,8 @@ Valores monetários são **enviados** como texto no formato brasileiro (`"1.234,
 
 | Método | Rota | Descrição |
 |---|---|---|
-| `GET` | `/configuracoes` | preferências do usuário (`diaInicioCiclo`; 1 se nunca configurou) |
-| `PUT` | `/configuracoes` | grava `{ "diaInicioCiclo": 1..28 }` |
+| `GET` | `/configuracoes` | preferências do usuário (`diaInicioCiclo`, 1 se nunca configurou; `despesaContaId`/`despesaCartaoId`, onde a despesa nova já vem, `null` = automático) |
+| `PUT` | `/configuracoes` | grava `{ "diaInicioCiclo": 1..28, "despesaContaId", "despesaCartaoId" }` — no máximo um dos dois, ativo e do usuário |
 
 ### `/categorias`
 
@@ -100,6 +100,7 @@ PostgreSQL, com schema versionado por **Flyway** (migrations em `src/main/resour
 - `V001__Inicial.sql`
 - `V002__fatura_transferida.sql`
 - `V003__configuracoes.sql`
+- `V004__configuracoes_destino_despesa.sql`
 
 > No Spring Boot 4 a autoconfiguração do Flyway passou a viver no módulo `spring-boot-flyway`. Sem essa dependência o Flyway é ignorado **em silêncio**. Ela está declarada no `pom.xml`; não remova.
 
