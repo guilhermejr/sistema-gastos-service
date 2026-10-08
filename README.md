@@ -22,10 +22,17 @@ Valores monetários são **enviados** como texto no formato brasileiro (`"1.234,
 
 | Método | Rota | Descrição |
 |---|---|---|
-| `GET` | `/dashboard` | receitas e despesas do mês (mesma regra do relatório: cartão pelo total da fatura que vence no mês), Saldo Geral, Saldo Total, faturas atuais, contas do saldo geral, próximos 5 a pagar e a receber (`{ itens, temMais }`) |
+| `GET` | `/dashboard` | receitas e despesas do ciclo mensal em que hoje cai (`ano`/`mes` é o nome do ciclo, `inicio`/`fim` as datas; mesma regra do relatório: cartão pelo total da fatura que vence no ciclo), Saldo Geral, Saldo Total, faturas atuais, contas do saldo geral, próximos 5 a pagar e a receber (`{ itens, temMais }`) |
 | `GET` | `/agenda/pagar?quantidade=N` | os N primeiros a pagar (despesas em conta e faturas), 1 a 100, com `temMais` |
 | `GET` | `/agenda/receber?quantidade=N` | os N primeiros a receber, 1 a 100, com `temMais` |
-| `GET` | `/relatorios/{ano}/{mes}` | lançamentos em conta do mês e, de cada cartão, só o total da fatura que vence no mês (`faturas`), com totais de entradas e saídas, realizados e pendentes |
+| `GET` | `/relatorios/{ano}/{mes}` | lançamentos em conta do ciclo chamado por `ano`/`mes` (`inicio`/`fim`) e, de cada cartão, só o total da fatura que vence no ciclo (`faturas`), com totais de entradas e saídas, realizados e pendentes |
+
+### `/configuracoes`
+
+| Método | Rota | Descrição |
+|---|---|---|
+| `GET` | `/configuracoes` | preferências do usuário (`diaInicioCiclo`; 1 se nunca configurou) |
+| `PUT` | `/configuracoes` | grava `{ "diaInicioCiclo": 1..28 }` |
 
 ### `/categorias`
 
@@ -44,7 +51,7 @@ Valores monetários são **enviados** como texto no formato brasileiro (`"1.234,
 | `POST` | `/contas` | cadastra (`nome`, `saldoInicial`, `somaSaldoGeral`) |
 | `GET` / `PUT` | `/contas/{id}` | busca, altera |
 | `PUT` | `/contas/{id}/desativar` / `ativar` | desativar exige saldo zero e nenhum cartão ativo ou despesa fixa usando a conta |
-| `GET` | `/contas/{id}/movimentacoes?ano=&mes=` | depósitos, saques, transferências e faturas pagas no mês |
+| `GET` | `/contas/{id}/movimentacoes?ano=&mes=` | depósitos, saques, transferências e faturas pagas no ciclo mensal |
 
 ### `/cartoes`
 
@@ -82,6 +89,7 @@ Valores monetários são **enviados** como texto no formato brasileiro (`"1.234,
 - **Saldo Geral** soma as contas ativas marcadas com `somaSaldoGeral`; **Saldo Total** soma todas as contas ativas.
 - **Cartão**: a fatura fecha `diasFechamento` dias antes do vencimento. A compra precisa ser **anterior** à data de fechamento para entrar na fatura; no próprio dia já vai para a seguinte. Compra no cartão não mexe em conta: quem debita a conta é o pagamento da fatura, que também marca as compras como realizadas. Uma compra ainda não paga pode ir para uma fatura seguinte ou para a imediatamente anterior, desde que essa não tenha sido paga — na inclusão ou depois; a escolha é mantida mesmo se o lançamento for editado ou o vencimento do cartão mudar.
 - **Relatório mensal**: lançamentos em conta pela data; cartão de crédito só pelo total de cada fatura, na data de vencimento. O que já foi pago da fatura conta como realizado.
+- **Ciclo mensal**: o "mês" do dashboard e do relatório começa no dia configurado (`diaInicioCiclo`, padrão 1 = mês do calendário) e vai até a véspera dele no mês seguinte. O ciclo leva o nome do mês em que tem mais dias: até o dia 15, o mês em que começa (dia 5: 05/10 a 04/11 é outubro); do 16 em diante, o seguinte (dia 25: 25/09 a 24/10 é outubro). Cada cartão entra com a fatura cujo vencimento cai dentro do ciclo. Mudar o dia não altera nenhum lançamento, só reagrupa todos os meses, inclusive os passados.
 - **Despesa fixa** repete todo mês no mesmo dia (dia 31 vira o último dia em meses curtos). As ocorrências são criadas sob demanda, quando o mês é consultado.
 - **Parcelado**: o valor informado é o total; a divisão é em centavos e a sobra vai para a primeira parcela.
 
@@ -91,6 +99,7 @@ PostgreSQL, com schema versionado por **Flyway** (migrations em `src/main/resour
 
 - `V001__Inicial.sql`
 - `V002__fatura_transferida.sql`
+- `V003__configuracoes.sql`
 
 > No Spring Boot 4 a autoconfiguração do Flyway passou a viver no módulo `spring-boot-flyway`. Sem essa dependência o Flyway é ignorado **em silêncio**. Ela está declarada no `pom.xml`; não remova.
 

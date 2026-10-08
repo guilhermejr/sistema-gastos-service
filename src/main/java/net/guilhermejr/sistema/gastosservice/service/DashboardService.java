@@ -14,6 +14,7 @@ import net.guilhermejr.sistema.gastosservice.domain.repository.LancamentoReposit
 import net.guilhermejr.sistema.gastosservice.domain.repository.RecorrenciaRepository;
 import net.guilhermejr.sistema.gastosservice.exception.ExceptionDefault;
 import net.guilhermejr.sistema.gastosservice.util.CalendarioUtil;
+import net.guilhermejr.sistema.gastosservice.util.Ciclo;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -41,6 +42,7 @@ public class DashboardService {
     private final SaldoService saldoService;
     private final FaturaService faturaService;
     private final RelatorioService relatorioService;
+    private final ConfiguracaoService configuracaoService;
     private final ContaMapper contaMapper;
     private final AuthenticationCurrentUserService authenticationCurrentUserService;
     private final Clock clock;
@@ -55,13 +57,14 @@ public class DashboardService {
 
         UUID usuario = authenticationCurrentUserService.getCurrentUser().getId();
         LocalDate hoje = LocalDate.now(clock);
-        YearMonth mes = YearMonth.from(hoje);
+        Ciclo ciclo = Ciclo.daData(hoje, configuracaoService.diaInicioCiclo(usuario));
 
-        LocalDate geradoAte = mes.plusMonths(1).atEndOfMonth();
+        // Cobre também RelatorioService.ateOndeGerar: o ciclo de hoje começa neste mês ou no anterior.
+        LocalDate geradoAte = YearMonth.from(hoje).plusMonths(1).atEndOfMonth();
         recorrenciaService.gerarAte(usuario, geradoAte);
 
-        // Mesma regra do relatório: cartão entra pelo total da fatura que vence no mês.
-        RelatorioService.Calculo doMes = relatorioService.calcular(usuario, mes);
+        // Mesma regra do relatório: cartão entra pelo total da fatura que vence no ciclo.
+        RelatorioService.Calculo doMes = relatorioService.calcular(usuario, ciclo);
 
         List<Conta> contas = contaRepository.findAllByUsuarioAndAtivoTrueOrderByNomeAsc(usuario);
         Map<Long, BigDecimal> saldos = saldoService.saldos(usuario, contas);
@@ -73,8 +76,10 @@ public class DashboardService {
                 .stream().map(faturaService::resumoAtual).toList();
 
         return DashboardResponse.builder()
-                .ano(mes.getYear())
-                .mes(mes.getMonthValue())
+                .ano(ciclo.nome().getYear())
+                .mes(ciclo.nome().getMonthValue())
+                .inicio(ciclo.inicio())
+                .fim(ciclo.fim())
                 .receitas(doMes.entradas())
                 .despesas(doMes.saidas())
                 .saldoGeral(saldoGeral)

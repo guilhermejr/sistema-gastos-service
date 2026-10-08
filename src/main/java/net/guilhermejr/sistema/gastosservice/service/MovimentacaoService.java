@@ -14,11 +14,11 @@ import net.guilhermejr.sistema.gastosservice.domain.repository.LancamentoReposit
 import net.guilhermejr.sistema.gastosservice.domain.repository.MovimentacaoRepository;
 import net.guilhermejr.sistema.gastosservice.exception.ExceptionDefault;
 import net.guilhermejr.sistema.gastosservice.exception.ExceptionNotFound;
+import net.guilhermejr.sistema.gastosservice.util.Ciclo;
 import net.guilhermejr.sistema.gastosservice.util.ConverteStringUtil;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
-import java.time.YearMonth;
 import java.util.List;
 import java.util.UUID;
 
@@ -30,17 +30,21 @@ public class MovimentacaoService {
     private final MovimentacaoRepository movimentacaoRepository;
     private final LancamentoRepository lancamentoRepository;
     private final ContaService contaService;
+    private final ConfiguracaoService configuracaoService;
     private final MovimentacaoMapper movimentacaoMapper;
     private final ConverteStringUtil converteStringUtil;
     private final AuthenticationCurrentUserService authenticationCurrentUserService;
 
-    /** Movimentações de uma conta num mês (depósitos, saques, transferências e faturas pagas). */
+    /**
+     * Movimentações de uma conta no ciclo mensal chamado por ano/mes (depósitos, saques,
+     * transferências e faturas pagas), o mesmo período do relatório.
+     */
     public List<MovimentacaoResponse> retornarDaConta(Long contaId, Integer ano, Integer mes) {
 
         Conta conta = contaService.contaDoUsuario(contaId);
-        YearMonth periodo = converteStringUtil.toYearMonth(ano, mes);
+        Ciclo ciclo = configuracaoService.ciclo(conta.getUsuario(), converteStringUtil.toYearMonth(ano, mes));
         return movimentacaoMapper.mapList(movimentacaoRepository
-                .findDaContaNoPeriodo(conta.getUsuario(), conta, periodo.atDay(1), periodo.atEndOfMonth()));
+                .findDaContaNoPeriodo(conta.getUsuario(), conta, ciclo.inicio(), ciclo.fim()));
 
     }
 

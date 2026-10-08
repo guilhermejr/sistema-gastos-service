@@ -10,11 +10,13 @@ import net.guilhermejr.sistema.gastosservice.domain.entity.Cartao;
 import net.guilhermejr.sistema.gastosservice.domain.entity.Lancamento;
 import net.guilhermejr.sistema.gastosservice.domain.enums.TipoLancamento;
 import net.guilhermejr.sistema.gastosservice.domain.repository.LancamentoRepository;
+import net.guilhermejr.sistema.gastosservice.util.Ciclo;
 import net.guilhermejr.sistema.gastosservice.util.ConverteStringUtil;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
+import java.time.LocalDate;
 import java.time.YearMonth;
 import java.util.Comparator;
 import java.util.List;
@@ -23,11 +25,13 @@ import java.util.UUID;
 import java.util.stream.Collectors;
 
 /**
- * Entradas e saídas de um mês, como o dinheiro passa pelas contas:
+ * Entradas e saídas de um ciclo mensal ({@link Ciclo}: o mês do calendário, ou do dia
+ * de início que o usuário configurou até a véspera dele no mês seguinte), como o
+ * dinheiro passa pelas contas:
  * <ul>
  *   <li>lançamentos em conta, pela data de cada um;</li>
  *   <li>compras de cartão não aparecem uma a uma: cada cartão entra com o total da
- *   fatura que vence no mês, na data de vencimento. O que já foi pago dela conta como
+ *   fatura que vence no ciclo, na data de vencimento. O que já foi pago dela conta como
  *   realizado e o resto como pendente. Estornos no cartão já vêm descontados do total.</li>
  * </ul>
  * Transferências, depósitos, saques e o pagamento da fatura (a movimentação) não
@@ -40,6 +44,7 @@ public class RelatorioService {
     private final LancamentoRepository lancamentoRepository;
     private final RecorrenciaService recorrenciaService;
     private final FaturaService faturaService;
+    private final ConfiguracaoService configuracaoService;
     private final LancamentoMapper lancamentoMapper;
     private final ConverteStringUtil converteStringUtil;
     private final AuthenticationCurrentUserService authenticationCurrentUserService;
@@ -53,16 +58,18 @@ public class RelatorioService {
     public RelatorioMensalResponse mensal(Integer ano, Integer mes) {
 
         UUID usuario = authenticationCurrentUserService.getCurrentUser().getId();
-        YearMonth periodo = converteStringUtil.toYearMonth(ano, mes);
+        Ciclo ciclo = configuracaoService.ciclo(usuario, converteStringUtil.toYearMonth(ano, mes));
 
-        recorrenciaService.gerarAte(usuario, periodo.atEndOfMonth());
-        Calculo calculo = calcular(usuario, periodo);
+        recorrenciaService.gerarAte(usuario, ateOndeGerar(ciclo));
+        Calculo calculo = calcular(usuario, ciclo);
         TotaisResponse entradas = calculo.entradas();
         TotaisResponse saidas = calculo.saidas();
 
         return RelatorioMensalResponse.builder()
-                .ano(periodo.getYear())
-                .mes(periodo.getMonthValue())
+                .ano(ciclo.nome().getYear())
+                .mes(ciclo.nome().getMonthValue())
+                .inicio(ciclo.inicio())
+                .fim(ciclo.fim())
                 .entradas(entradas)
                 .saidas(saidas)
                 .saldoRealizado(entradas.getRealizado().subtract(saidas.getRealizado()))
@@ -74,21 +81,37 @@ public class RelatorioService {
     }
 
     /**
-     * Calcula o mês. Usado também pelos cards de Receitas e Despesas do dashboard, para
-     * que eles e o relatório nunca discordem. Quem chama gera antes as ocorrências fixas
-     * até o fim do mês.
+     * Até onde gerar as ocorrências fixas antes de {@link #calcular}: o fim do ciclo e o
+     * das faturas que vencem nele (a do mês seguinte ao início junta compras até o fim
+     * daquele mês).
      */
-    public Calculo calcular(UUID usuario, YearMonth periodo) {
+    public static LocalDate ateOndeGerar(Ciclo ciclo) {
+        return ciclo.mesInicio().plusMonths(1).atEndOfMonth();
+    }
+
+    /**
+     * Calcula o ciclo. Usado também pelos cards de Receitas e Despesas do dashboard, para
+     * que eles e o relatório nunca discordem. Quem chama gera antes as ocorrências fixas
+     * até {@link #ateOndeGerar}.
+     *
+     * <p>A fatura de cada cartão é a do mês em que o vencimento atual dele cai dentro do
+     * ciclo ({@link Ciclo#mesDaFatura}), buscada pelo mês inteiro como em todo o resto —
+     * compras já pagas guardam o vencimento antigo se o dia do cartão mudou.
+     */
+    public Calculo calcular(UUID usuario, Ciclo ciclo) {
 
         List<Lancamento> emConta = lancamentoRepository
-                .findAllByUsuarioAndDataBetweenOrderByDataAscIdAsc(usuario, periodo.atDay(1), periodo.atEndOfMonth())
+                .findAllByUsuarioAndDataBetweenOrderByDataAscIdAsc(usuario, ciclo.inicio(), ciclo.fim())
                 .stream().filter(l -> l.getConta() != null).toList();
 
+        YearMonth primeiro = ciclo.mesInicio();
         Map<Cartao, List<Lancamento>> porCartao = lancamentoRepository
-                .findAllByUsuarioAndCartaoIsNotNullAndFaturaBetween(usuario, periodo.atDay(1), periodo.atEndOfMonth())
-                .stream().collect(Collectors.groupingBy(Lancamento::getCartao));
+                .findAllByUsuarioAndCartaoIsNotNullAndFaturaBetween(usuario, primeiro.atDay(1), primeiro.plusMonths(1).atEndOfMonth())
+                .stream()
+                .filter(l -> YearMonth.from(l.getFatura()).equals(ciclo.mesDaFatura(l.getCartao().getDiaVencimento())))
+                .collect(Collectors.groupingBy(Lancamento::getCartao));
         List<FaturaResumidaResponse> faturas = porCartao.entrySet().stream()
-                .map(e -> faturaService.resumo(e.getKey(), periodo, e.getValue()))
+                .map(e -> faturaService.resumo(e.getKey(), ciclo.mesDaFatura(e.getKey().getDiaVencimento()), e.getValue()))
                 .sorted(Comparator.comparing(FaturaResumidaResponse::getVencimento).thenComparing(FaturaResumidaResponse::getCartaoNome))
                 .toList();
 
