@@ -16,6 +16,7 @@ import net.guilhermejr.sistema.gastosservice.exception.ExceptionDefault;
 import net.guilhermejr.sistema.gastosservice.util.CalendarioUtil;
 import net.guilhermejr.sistema.gastosservice.util.Ciclo;
 import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -83,6 +84,7 @@ public class DashboardService {
                 .receitas(doMes.entradas())
                 .despesas(doMes.saidas())
                 .saldoGeral(saldoGeral)
+                .saldoGeralPrevisto(saldoGeral.add(pendenteAte(usuario, contasSaldoGeral, ciclo.fim())))
                 .saldoTotal(saldoTotal)
                 .faturas(faturas.stream().map(FaturaResumidaResponse::getTotal).reduce(BigDecimal.ZERO, BigDecimal::add))
                 .contas(contasSaldoGeral.stream().map(c -> contaMapper.mapObject(c, saldos.get(c.getId()))).toList())
@@ -90,6 +92,36 @@ public class DashboardService {
                 .proximosPagar(agenda(usuario, TipoLancamento.D, ITENS_AGENDA, hoje, geradoAte))
                 .proximosReceber(agenda(usuario, TipoLancamento.R, ITENS_AGENDA, hoje, geradoAte))
                 .build();
+
+    }
+
+    /**
+     * Quanto as contas vão ganhar (positivo) ou perder até {@code fim} se tudo o que está
+     * pendente for realizado: receitas menos despesas lançadas nelas e faturas que vencem
+     * até lá de cartões que elas pagam. Atrasados entram — continuam devidos.
+     */
+    private BigDecimal pendenteAte(UUID usuario, List<Conta> contas, LocalDate fim) {
+
+        Set<Long> ids = contas.stream().map(Conta::getId).collect(Collectors.toSet());
+
+        BigDecimal emConta = Stream.of(TipoLancamento.R, TipoLancamento.D)
+                .flatMap(tipo -> lancamentoRepository.findPendentesEmConta(usuario, tipo, Pageable.unpaged()).stream())
+                .filter(l -> ids.contains(l.getConta().getId()) && !l.getData().isAfter(fim))
+                .map(l -> l.getTipo() == TipoLancamento.R ? l.getValor() : l.getValor().negate())
+                .reduce(BigDecimal.ZERO, BigDecimal::add);
+
+        BigDecimal faturas = lancamentoRepository.findPendentesEmCartao(usuario).stream()
+                .filter(l -> l.getCartao().getConta() != null && ids.contains(l.getCartao().getConta().getId()))
+                .collect(Collectors.groupingBy(Lancamento::getCartao,
+                        Collectors.groupingBy(l -> YearMonth.from(l.getFatura()))))
+                .entrySet().stream()
+                .flatMap(porCartao -> porCartao.getValue().entrySet().stream()
+                        .filter(f -> !CalendarioUtil.vencimentoNoMes(f.getKey(), porCartao.getKey().getDiaVencimento()).isAfter(fim))
+                        .map(f -> FaturaService.liquido(f.getValue())))
+                .filter(valor -> valor.signum() > 0)
+                .reduce(BigDecimal.ZERO, BigDecimal::add);
+
+        return emConta.subtract(faturas);
 
     }
 

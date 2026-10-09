@@ -23,6 +23,11 @@ public class DashboardResponse {
     private TotaisResponse despesas;
     /** Soma das contas ativas marcadas para o saldo geral. */
     private BigDecimal saldoGeral;
+    /**
+     * Saldo Geral no fim do ciclo, se tudo o que está pendente até lá nessas contas for
+     * realizado: lançamentos (atrasados inclusive) e faturas pagas por elas.
+     */
+    private BigDecimal saldoGeralPrevisto;
     /** Soma de todas as contas ativas. */
     private BigDecimal saldoTotal;
     /** Soma das faturas atuais dos cartões ativos. */

@@ -22,7 +22,7 @@ Valores monetários são **enviados** como texto no formato brasileiro (`"1.234,
 
 | Método | Rota | Descrição |
 |---|---|---|
-| `GET` | `/dashboard` | receitas e despesas do ciclo mensal em que hoje cai (`ano`/`mes` é o nome do ciclo, `inicio`/`fim` as datas; mesma regra do relatório: cartão pelo total da fatura que vence no ciclo), Saldo Geral, Saldo Total, faturas atuais, contas do saldo geral, próximos 5 a pagar e a receber (`{ itens, temMais }`) |
+| `GET` | `/dashboard` | receitas e despesas do ciclo mensal em que hoje cai (`ano`/`mes` é o nome do ciclo, `inicio`/`fim` as datas; mesma regra do relatório: cartão pelo total da fatura que vence no ciclo), Saldo Geral, projeção do Saldo Geral no fim do ciclo (`saldoGeralPrevisto`: pendentes até o fim do ciclo nas contas dele, atrasados inclusive, e faturas de cartões pagos por elas), Saldo Total, faturas atuais, contas do saldo geral, próximos 5 a pagar e a receber (`{ itens, temMais }`) |
 | `GET` | `/agenda/pagar?quantidade=N` | os N primeiros a pagar (despesas em conta e faturas), 1 a 100, com `temMais` |
 | `GET` | `/agenda/receber?quantidade=N` | os N primeiros a receber, 1 a 100, com `temMais` |
 | `GET` | `/relatorios/{ano}/{mes}` | lançamentos em conta do ciclo chamado por `ano`/`mes` (`inicio`/`fim`) e, de cada cartão, só o total da fatura que vence no ciclo (`faturas`), com totais de entradas e saídas, realizados e pendentes; `transferencias` traz as transferências entre contas do ciclo, só para consulta (fora dos totais) |
