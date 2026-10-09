@@ -73,7 +73,7 @@ public class DashboardService {
         List<Conta> contasSaldoGeral = contas.stream().filter(Conta::getSomaSaldoGeral).toList();
         BigDecimal saldoGeral = contasSaldoGeral.stream().map(c -> saldos.get(c.getId())).reduce(BigDecimal.ZERO, BigDecimal::add);
 
-        List<FaturaResumidaResponse> faturas = cartaoRepository.findAllByUsuarioAndAtivoTrueOrderByNomeAsc(usuario)
+        List<FaturaResumidaResponse> faturas = cartaoRepository.findAllByUsuarioAndAtivoTrueOrderByOrdemAscNomeAsc(usuario)
                 .stream().map(faturaService::resumoAtual).toList();
 
         return DashboardResponse.builder()

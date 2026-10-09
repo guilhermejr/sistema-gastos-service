@@ -16,12 +16,14 @@ import net.guilhermejr.sistema.gastosservice.domain.repository.RecorrenciaReposi
 import net.guilhermejr.sistema.gastosservice.exception.ExceptionDefault;
 import net.guilhermejr.sistema.gastosservice.exception.ExceptionNotFound;
 import net.guilhermejr.sistema.gastosservice.util.CalendarioUtil;
+import net.guilhermejr.sistema.gastosservice.util.OrdemUtil;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDate;
 import java.time.YearMonth;
 import java.time.format.DateTimeFormatter;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Objects;
 import java.util.UUID;
@@ -43,8 +45,8 @@ public class CartaoService {
 
         UUID usuario = usuario();
         List<Cartao> cartoes = somenteAtivos
-                ? cartaoRepository.findAllByUsuarioAndAtivoTrueOrderByNomeAsc(usuario)
-                : cartaoRepository.findAllByUsuarioOrderByNomeAsc(usuario);
+                ? cartaoRepository.findAllByUsuarioAndAtivoTrueOrderByOrdemAscNomeAsc(usuario)
+                : cartaoRepository.findAllByUsuarioOrderByOrdemAscNomeAsc(usuario);
         return cartaoMapper.mapList(cartoes);
 
     }
@@ -68,6 +70,7 @@ public class CartaoService {
         cartao.setDiasFechamento(cartaoRequest.getDiasFechamento());
         cartao.setConta(contaService.contaAtivaDoUsuario(cartaoRequest.getContaId()));
         cartao.setAtivo(true);
+        cartao.setOrdem(cartaoRepository.maiorOrdem(usuario) + 1);
         cartao.setUsuario(usuario);
 
         return cartaoMapper.mapObject(cartaoRepository.save(cartao));
@@ -205,6 +208,19 @@ public class CartaoService {
     /** Uma compra pode ir para qualquer fatura a partir da anterior à sua natural. */
     private static boolean aceitaFatura(YearMonth natural, YearMonth destino) {
         return !destino.isBefore(natural.minusMonths(1));
+    }
+
+    /**
+     * Troca o cartão de lugar com o vizinho de cima ({@code deslocamento} -1) ou de baixo
+     * (+1), contando também os desativados, e devolve todos na ordem nova.
+     */
+    @Transactional
+    public List<CartaoResponse> mover(Long id, int deslocamento) {
+
+        List<Cartao> cartoes = new ArrayList<>(cartaoRepository.findAllByUsuarioOrderByOrdemAscNomeAsc(usuario()));
+        cartaoRepository.saveAll(OrdemUtil.mover(cartoes, cartaoDoUsuario(id).getId(), deslocamento));
+        return retornar(false);
+
     }
 
     /** Cartão do usuário e ativo — o que se exige para lançar nele. */

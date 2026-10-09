@@ -12,7 +12,7 @@ import java.io.Serializable;
 @AllArgsConstructor
 @Entity
 @Table(name = "cartoes")
-public class Cartao extends Auditoria implements Serializable {
+public class Cartao extends Auditoria implements Serializable, Ordenavel {
 
     private static final long serialVersionUID = 1L;
 
@@ -37,5 +37,9 @@ public class Cartao extends Auditoria implements Serializable {
 
     @Column(nullable = false)
     private Boolean ativo;
+
+    /** Posição nas listas, escolhida pelo usuário (1 = primeiro). */
+    @Column(nullable = false)
+    private Integer ordem;
 
 }

@@ -66,6 +66,22 @@ public class CartaoController {
 
     }
 
+    @PutMapping("/{id}/subir")
+    public ResponseEntity<List<CartaoResponse>> subir(@PathVariable Long id) {
+
+        log.info("Subindo cartão: {}", id);
+        return ResponseEntity.status(HttpStatus.OK).body(cartaoService.mover(id, -1));
+
+    }
+
+    @PutMapping("/{id}/descer")
+    public ResponseEntity<List<CartaoResponse>> descer(@PathVariable Long id) {
+
+        log.info("Descendo cartão: {}", id);
+        return ResponseEntity.status(HttpStatus.OK).body(cartaoService.mover(id, 1));
+
+    }
+
     @PutMapping("/{id}/ativar")
     public ResponseEntity<CartaoResponse> ativar(@PathVariable Long id) {
 

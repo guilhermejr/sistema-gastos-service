@@ -1,4 +1,4 @@
-package net.guilhermejr.sistema.gastosservice.service;
+package net.guilhermejr.sistema.gastosservice.util;
 
 import net.guilhermejr.sistema.gastosservice.domain.entity.Conta;
 import net.guilhermejr.sistema.gastosservice.exception.ExceptionDefault;
@@ -9,9 +9,9 @@ import org.junit.jupiter.api.Test;
 import java.util.ArrayList;
 import java.util.List;
 
-public class ContaServiceTest {
+public class OrdemUtilTest {
 
-    /** Contas 1, 2 e 3, com as ordens dadas (empates vêm na ordem da lista, como do banco). */
+    /** Itens 1, 2 e 3 (contas servem de exemplo), com as ordens dadas (empates vêm na ordem da lista, como do banco). */
     private static List<Conta> contas(int... ordens) {
 
         List<Conta> contas = new ArrayList<>();
@@ -30,10 +30,10 @@ public class ContaServiceTest {
     }
 
     @Test
-    @DisplayName("Sobe a conta trocando com a de cima")
+    @DisplayName("Sobe o item trocando com o de cima")
     public void sobe() {
 
-        List<Conta> resultado = ContaService.reordenar(contas(1, 2, 3), 3L, -1);
+        List<Conta> resultado = OrdemUtil.mover(contas(1, 2, 3), 3L, -1);
 
         Assertions.assertEquals(List.of(1L, 3L, 2L), ids(resultado));
         Assertions.assertEquals(List.of(1, 2, 3), resultado.stream().map(Conta::getOrdem).toList());
@@ -41,18 +41,18 @@ public class ContaServiceTest {
     }
 
     @Test
-    @DisplayName("Desce a conta trocando com a de baixo")
+    @DisplayName("Desce o item trocando com o de baixo")
     public void desce() {
 
-        Assertions.assertEquals(List.of(2L, 1L, 3L), ids(ContaService.reordenar(contas(1, 2, 3), 1L, 1)));
+        Assertions.assertEquals(List.of(2L, 1L, 3L), ids(OrdemUtil.mover(contas(1, 2, 3), 1L, 1)));
 
     }
 
     @Test
-    @DisplayName("Renumera contas empatadas na ordem")
+    @DisplayName("Renumera itens empatados na ordem")
     public void renumera_empatadas() {
 
-        List<Conta> resultado = ContaService.reordenar(contas(1, 1, 1), 2L, 1);
+        List<Conta> resultado = OrdemUtil.mover(contas(1, 1, 1), 2L, 1);
 
         Assertions.assertEquals(List.of(1L, 3L, 2L), ids(resultado));
         Assertions.assertEquals(List.of(1, 2, 3), resultado.stream().map(Conta::getOrdem).toList());
@@ -60,11 +60,11 @@ public class ContaServiceTest {
     }
 
     @Test
-    @DisplayName("Recusa subir a primeira e descer a última")
+    @DisplayName("Recusa subir o primeiro e descer o último")
     public void recusa_nas_pontas() {
 
-        Assertions.assertThrows(ExceptionDefault.class, () -> ContaService.reordenar(contas(1, 2, 3), 1L, -1));
-        Assertions.assertThrows(ExceptionDefault.class, () -> ContaService.reordenar(contas(1, 2, 3), 3L, 1));
+        Assertions.assertThrows(ExceptionDefault.class, () -> OrdemUtil.mover(contas(1, 2, 3), 1L, -1));
+        Assertions.assertThrows(ExceptionDefault.class, () -> OrdemUtil.mover(contas(1, 2, 3), 3L, 1));
 
     }
 

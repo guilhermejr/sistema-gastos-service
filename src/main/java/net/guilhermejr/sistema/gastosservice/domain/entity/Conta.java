@@ -13,7 +13,7 @@ import java.math.BigDecimal;
 @AllArgsConstructor
 @Entity
 @Table(name = "contas")
-public class Conta extends Auditoria implements Serializable {
+public class Conta extends Auditoria implements Serializable, Ordenavel {
 
     private static final long serialVersionUID = 1L;
 

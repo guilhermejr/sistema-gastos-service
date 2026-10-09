@@ -13,12 +13,12 @@ import net.guilhermejr.sistema.gastosservice.domain.repository.RecorrenciaReposi
 import net.guilhermejr.sistema.gastosservice.exception.ExceptionDefault;
 import net.guilhermejr.sistema.gastosservice.exception.ExceptionNotFound;
 import net.guilhermejr.sistema.gastosservice.util.ConverteStringUtil;
+import net.guilhermejr.sistema.gastosservice.util.OrdemUtil;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
 import java.util.ArrayList;
-import java.util.Collections;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
@@ -137,31 +137,8 @@ public class ContaService {
     public List<ContaResponse> mover(Long id, int deslocamento) {
 
         List<Conta> contas = new ArrayList<>(contaRepository.findAllByUsuarioOrderByOrdemAscNomeAsc(usuario()));
-        contaRepository.saveAll(reordenar(contas, contaDoUsuario(id).getId(), deslocamento));
+        contaRepository.saveAll(OrdemUtil.mover(contas, contaDoUsuario(id).getId(), deslocamento));
         return retornar(false);
-
-    }
-
-    /**
-     * Troca a conta com a vizinha e renumera todas de 1 em diante — assim contas com a
-     * mesma ordem (empatadas por nome) também se separam.
-     */
-    static List<Conta> reordenar(List<Conta> contas, Long id, int deslocamento) {
-
-        int origem = -1;
-        for (int i = 0; i < contas.size(); i++) {
-            if (contas.get(i).getId().equals(id)) origem = i;
-        }
-        int destino = origem + deslocamento;
-        if (destino < 0 || destino >= contas.size()) {
-            throw new ExceptionDefault(deslocamento < 0 ? "A conta já é a primeira." : "A conta já é a última.");
-        }
-
-        Collections.swap(contas, origem, destino);
-        for (int i = 0; i < contas.size(); i++) {
-            contas.get(i).setOrdem(i + 1);
-        }
-        return contas;
 
     }
 

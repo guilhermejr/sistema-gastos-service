@@ -58,9 +58,10 @@ Valores monetários são **enviados** como texto no formato brasileiro (`"1.234,
 
 | Método | Rota | Descrição |
 |---|---|---|
-| `GET` | `/cartoes?ativos=true` | lista |
+| `GET` | `/cartoes?ativos=true` | lista, na ordem escolhida pelo usuário (empate por nome) |
 | `POST` | `/cartoes` | cadastra (`nome`, `diaVencimento`, `diasFechamento`, `contaId`) |
 | `GET` / `PUT` | `/cartoes/{id}` | busca, altera |
+| `PUT` | `/cartoes/{id}/subir` / `descer` | troca o cartão de lugar com o vizinho (desativados contam) e devolve a lista inteira; novo cartão entra no fim |
 | `PUT` | `/cartoes/{id}/desativar` / `ativar` | tira ou devolve ao uso |
 | `GET` | `/cartoes/{id}/faturas/atual` | fatura que recebe uma compra feita hoje |
 | `GET` | `/cartoes/{id}/faturas/{ano}/{mes}` | fatura com vencimento no mês (`anteriorPaga` diz se a do mês anterior já recebeu pagamento) |
