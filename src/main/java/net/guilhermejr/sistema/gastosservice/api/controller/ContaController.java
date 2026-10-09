@@ -73,6 +73,22 @@ public class ContaController {
 
     }
 
+    @PutMapping("/{id}/subir")
+    public ResponseEntity<List<ContaResponse>> subir(@PathVariable Long id) {
+
+        log.info("Subindo conta: {}", id);
+        return ResponseEntity.status(HttpStatus.OK).body(contaService.mover(id, -1));
+
+    }
+
+    @PutMapping("/{id}/descer")
+    public ResponseEntity<List<ContaResponse>> descer(@PathVariable Long id) {
+
+        log.info("Descendo conta: {}", id);
+        return ResponseEntity.status(HttpStatus.OK).body(contaService.mover(id, 1));
+
+    }
+
     @PutMapping("/{id}/ativar")
     public ResponseEntity<ContaResponse> ativar(@PathVariable Long id) {
 

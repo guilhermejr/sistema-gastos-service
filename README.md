@@ -47,9 +47,10 @@ Valores monetários são **enviados** como texto no formato brasileiro (`"1.234,
 
 | Método | Rota | Descrição |
 |---|---|---|
-| `GET` | `/contas?ativas=true` | lista com o saldo calculado |
+| `GET` | `/contas?ativas=true` | lista com o saldo calculado, na ordem escolhida pelo usuário (empate por nome) |
 | `POST` | `/contas` | cadastra (`nome`, `saldoInicial`, `somaSaldoGeral`) |
 | `GET` / `PUT` | `/contas/{id}` | busca, altera |
+| `PUT` | `/contas/{id}/subir` / `descer` | troca a conta de lugar com a vizinha (desativadas contam) e devolve a lista inteira; nova conta entra no fim |
 | `PUT` | `/contas/{id}/desativar` / `ativar` | desativar exige saldo zero e nenhum cartão ativo ou despesa fixa usando a conta |
 | `GET` | `/contas/{id}/movimentacoes?ano=&mes=` | depósitos, saques, transferências e faturas pagas no ciclo mensal |
 

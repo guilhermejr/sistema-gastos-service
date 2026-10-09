@@ -67,7 +67,7 @@ public class DashboardService {
         // Mesma regra do relatório: cartão entra pelo total da fatura que vence no ciclo.
         RelatorioService.Calculo doMes = relatorioService.calcular(usuario, ciclo);
 
-        List<Conta> contas = contaRepository.findAllByUsuarioAndAtivoTrueOrderByNomeAsc(usuario);
+        List<Conta> contas = contaRepository.findAllByUsuarioAndAtivoTrueOrderByOrdemAscNomeAsc(usuario);
         Map<Long, BigDecimal> saldos = saldoService.saldos(usuario, contas);
         BigDecimal saldoTotal = contas.stream().map(c -> saldos.get(c.getId())).reduce(BigDecimal.ZERO, BigDecimal::add);
         List<Conta> contasSaldoGeral = contas.stream().filter(Conta::getSomaSaldoGeral).toList();

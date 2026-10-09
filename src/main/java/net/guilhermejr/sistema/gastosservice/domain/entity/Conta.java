@@ -36,4 +36,8 @@ public class Conta extends Auditoria implements Serializable {
     @Column(nullable = false)
     private Boolean ativo;
 
+    /** Posição nas listas, escolhida pelo usuário (1 = primeira). */
+    @Column(nullable = false)
+    private Integer ordem;
+
 }
