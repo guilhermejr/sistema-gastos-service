@@ -65,6 +65,7 @@ public class ContaService {
         conta.setNome(nome);
         conta.setSaldoInicial(converteStringUtil.toBigDecimal(contaRequest.getSaldoInicial()));
         conta.setSomaSaldoGeral(contaRequest.getSomaSaldoGeral());
+        conta.setMostraSaldoPrevisto(!Boolean.FALSE.equals(contaRequest.getMostraSaldoPrevisto()));
         conta.setAtivo(true);
         conta.setOrdem(contaRepository.maiorOrdem(usuario) + 1);
         conta.setUsuario(usuario);
@@ -84,6 +85,9 @@ public class ContaService {
         conta.setNome(nome);
         conta.setSaldoInicial(converteStringUtil.toBigDecimal(contaRequest.getSaldoInicial()));
         conta.setSomaSaldoGeral(contaRequest.getSomaSaldoGeral());
+        if (contaRequest.getMostraSaldoPrevisto() != null) {
+            conta.setMostraSaldoPrevisto(contaRequest.getMostraSaldoPrevisto());
+        }
 
         Conta contaSave = contaRepository.save(conta);
         return contaMapper.mapObject(contaSave, saldoService.saldo(contaSave));

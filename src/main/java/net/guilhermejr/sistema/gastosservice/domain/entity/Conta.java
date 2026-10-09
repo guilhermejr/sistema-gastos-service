@@ -33,6 +33,10 @@ public class Conta extends Auditoria implements Serializable, Ordenavel {
     @Column(nullable = false)
     private Boolean somaSaldoGeral;
 
+    /** O dashboard mostra o saldo dela no fim do ciclo. Não muda a projeção do Saldo Geral. */
+    @Column(nullable = false)
+    private Boolean mostraSaldoPrevisto;
+
     @Column(nullable = false)
     private Boolean ativo;
 

@@ -25,4 +25,7 @@ public class ContaRequest {
     @NotNull
     private Boolean somaSaldoGeral;
 
+    /** Opcional: nulo mantém o que a conta já tem (na inclusão, mostra). */
+    private Boolean mostraSaldoPrevisto;
+
 }
