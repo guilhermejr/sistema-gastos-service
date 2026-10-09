@@ -26,6 +26,7 @@ Valores monetários são **enviados** como texto no formato brasileiro (`"1.234,
 | `GET` | `/agenda/pagar?quantidade=N` | os N primeiros a pagar (despesas em conta e faturas), 1 a 100, com `temMais` |
 | `GET` | `/agenda/receber?quantidade=N` | os N primeiros a receber, 1 a 100, com `temMais` |
 | `GET` | `/relatorios/{ano}/{mes}` | lançamentos em conta do ciclo chamado por `ano`/`mes` (`inicio`/`fim`) e, de cada cartão, só o total da fatura que vence no ciclo (`faturas`), com totais de entradas e saídas, realizados e pendentes; `transferencias` traz as transferências entre contas do ciclo, só para consulta (fora dos totais) |
+| `GET` | `/relatorios/{ano}/{mes}/categorias` | despesas e receitas do mesmo ciclo somadas por categoria, para os gráficos: `despesas` junta as em conta e as compras das faturas que vencem no ciclo; `receitas` são as em conta; realizado e pendente juntos; `estornosCartao` traz à parte o que foi estornado nas faturas |
 
 ### `/configuracoes`
 

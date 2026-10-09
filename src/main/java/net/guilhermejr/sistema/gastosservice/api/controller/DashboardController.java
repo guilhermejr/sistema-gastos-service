@@ -3,6 +3,7 @@ package net.guilhermejr.sistema.gastosservice.api.controller;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.log4j.Log4j2;
 import net.guilhermejr.sistema.gastosservice.api.response.AgendaResponse;
+import net.guilhermejr.sistema.gastosservice.api.response.CategoriasMensalResponse;
 import net.guilhermejr.sistema.gastosservice.api.response.DashboardResponse;
 import net.guilhermejr.sistema.gastosservice.api.response.RelatorioMensalResponse;
 import net.guilhermejr.sistema.gastosservice.domain.enums.TipoLancamento;
@@ -51,6 +52,14 @@ public class DashboardController {
 
         log.info("Relatório de {}/{}", mes, ano);
         return ResponseEntity.status(HttpStatus.OK).body(relatorioService.mensal(ano, mes));
+
+    }
+
+    @GetMapping("/relatorios/{ano}/{mes}/categorias")
+    public ResponseEntity<CategoriasMensalResponse> categoriasMensal(@PathVariable Integer ano, @PathVariable Integer mes) {
+
+        log.info("Categorias de {}/{}", mes, ano);
+        return ResponseEntity.status(HttpStatus.OK).body(relatorioService.categorias(ano, mes));
 
     }
 

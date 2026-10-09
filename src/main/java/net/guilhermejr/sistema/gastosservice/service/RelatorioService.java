@@ -4,10 +4,13 @@ import lombok.RequiredArgsConstructor;
 import net.guilhermejr.seguranca.jwt.AuthenticationCurrentUserService;
 import net.guilhermejr.sistema.gastosservice.api.mapper.LancamentoMapper;
 import net.guilhermejr.sistema.gastosservice.api.mapper.MovimentacaoMapper;
+import net.guilhermejr.sistema.gastosservice.api.response.CategoriasMensalResponse;
 import net.guilhermejr.sistema.gastosservice.api.response.FaturaResumidaResponse;
 import net.guilhermejr.sistema.gastosservice.api.response.RelatorioMensalResponse;
 import net.guilhermejr.sistema.gastosservice.api.response.TotaisResponse;
+import net.guilhermejr.sistema.gastosservice.api.response.ValorCategoriaResponse;
 import net.guilhermejr.sistema.gastosservice.domain.entity.Cartao;
+import net.guilhermejr.sistema.gastosservice.domain.entity.Categoria;
 import net.guilhermejr.sistema.gastosservice.domain.entity.Lancamento;
 import net.guilhermejr.sistema.gastosservice.domain.enums.TipoLancamento;
 import net.guilhermejr.sistema.gastosservice.domain.enums.TipoMovimentacao;
@@ -22,10 +25,12 @@ import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.time.YearMonth;
 import java.util.Comparator;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 import java.util.stream.Collectors;
+import java.util.stream.Stream;
 
 /**
  * Entradas e saídas de um ciclo mensal ({@link Ciclo}: o mês do calendário, ou do dia
@@ -55,9 +60,12 @@ public class RelatorioService {
     private final ConverteStringUtil converteStringUtil;
     private final AuthenticationCurrentUserService authenticationCurrentUserService;
 
-    /** Entradas e saídas de um mês pela regra acima, com as listas que as compõem. */
+    /**
+     * Entradas e saídas de um mês pela regra acima, com as listas que as compõem
+     * ({@code noCartao}: as compras e estornos das faturas em {@code faturas}).
+     */
     public record Calculo(TotaisResponse entradas, TotaisResponse saidas,
-                          List<Lancamento> emConta, List<FaturaResumidaResponse> faturas) {
+                          List<Lancamento> emConta, List<Lancamento> noCartao, List<FaturaResumidaResponse> faturas) {
     }
 
     @Transactional
@@ -85,6 +93,53 @@ public class RelatorioService {
                 .transferencias(movimentacaoMapper.mapList(movimentacaoRepository
                         .findAllByUsuarioAndTipoAndDataBetweenOrderByDataAscIdAsc(usuario, TipoMovimentacao.TRANSFERENCIA, ciclo.inicio(), ciclo.fim())))
                 .build();
+
+    }
+
+    /**
+     * Despesas e receitas do ciclo por categoria, para os gráficos. Segue a mesma regra
+     * do relatório, mas abre as faturas: as despesas são as em conta mais as compras das
+     * faturas que vencem no ciclo, cada uma na sua categoria, e as receitas são as em
+     * conta. Conta realizado e pendente. Estornos no cartão vêm à parte em
+     * {@code estornosCartao}.
+     */
+    @Transactional
+    public CategoriasMensalResponse categorias(Integer ano, Integer mes) {
+
+        UUID usuario = authenticationCurrentUserService.getCurrentUser().getId();
+        Ciclo ciclo = configuracaoService.ciclo(usuario, converteStringUtil.toYearMonth(ano, mes));
+
+        recorrenciaService.gerarAte(usuario, ateOndeGerar(ciclo));
+        Calculo calculo = calcular(usuario, ciclo);
+        List<Lancamento> despesas = Stream.concat(calculo.emConta().stream(), calculo.noCartao().stream()).toList();
+
+        return CategoriasMensalResponse.builder()
+                .ano(ciclo.nome().getYear())
+                .mes(ciclo.nome().getMonthValue())
+                .inicio(ciclo.inicio())
+                .fim(ciclo.fim())
+                .despesas(porCategoria(despesas, TipoLancamento.D))
+                .receitas(porCategoria(calculo.emConta(), TipoLancamento.R))
+                .estornosCartao(calculo.noCartao().stream()
+                        .filter(l -> l.getTipo() == TipoLancamento.R)
+                        .map(Lancamento::getValor)
+                        .reduce(BigDecimal.ZERO, BigDecimal::add))
+                .build();
+
+    }
+
+    /** Soma os lançamentos do tipo por categoria, da maior para a menor (empate pelo nome). */
+    public static List<ValorCategoriaResponse> porCategoria(List<Lancamento> lancamentos, TipoLancamento tipo) {
+
+        Map<Categoria, BigDecimal> somas = lancamentos.stream()
+                .filter(l -> l.getTipo() == tipo)
+                .collect(Collectors.groupingBy(Lancamento::getCategoria, LinkedHashMap::new,
+                        Collectors.reducing(BigDecimal.ZERO, Lancamento::getValor, BigDecimal::add)));
+        return somas.entrySet().stream()
+                .map(e -> new ValorCategoriaResponse(e.getKey().getId(), e.getKey().getDescricao(), e.getValue()))
+                .sorted(Comparator.comparing(ValorCategoriaResponse::getValor).reversed()
+                        .thenComparing(ValorCategoriaResponse::getDescricao))
+                .toList();
 
     }
 
@@ -131,7 +186,8 @@ public class RelatorioService {
                 saidasEmConta.getRealizado().add(faturasTotal.subtract(faturasPendente)),
                 saidasEmConta.getPendente().add(faturasPendente));
 
-        return new Calculo(entradas, saidas, emConta, faturas);
+        List<Lancamento> noCartao = porCartao.values().stream().flatMap(List::stream).toList();
+        return new Calculo(entradas, saidas, emConta, noCartao, faturas);
 
     }
 
