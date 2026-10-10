@@ -29,6 +29,18 @@ Read these together before changing any calculation:
 - **Default destination of a new expense** (`configuracoes.despesa_conta_id` / `despesa_cartao_id`, at most one — DB check). Only the frontend uses it, to preselect the account/card. Saving requires it active and owned (`contaAtivaDoUsuario`/`cartaoAtivoDoUsuario`); deactivating it later keeps the choice stored, and the frontend falls back to its automatic choice while it is inactive. `PUT /configuracoes` replaces every field, so a client must send the current values of the ones it isn't changing.
 - **Invoice status** is derived on read: `ABERTA` before closing, then `PAGA` if nothing pending, `VENCIDA` after the due date, else `FECHADA`.
 
+## Card transactions from the bank (Open Finance, via Pluggy)
+
+A card can be linked to a credit card at the bank (`PUT /cartoes/{id}/banco { bancoContaId }`; empty unlinks). `BancoService.sincronizar` (button `POST /cartoes/{id}/banco/sincronizar`, and `BancoAgendamento` daily at 14:00, **`prod` profile only**) reads every transaction of that card from the Pluggy API (`PluggyClient`, read-only) and keeps those of invoices from `cartoes.banco_inicio_fatura` on in `transacoes_banco`. It **never creates or changes an entry** — the table is for reconciliation, which is the next step (`situacao`: `A_REVISAR` → `CONCILIADA`/`IMPORTADA`/`IGNORADA`).
+
+- **Re-running is idempotent**: `banco_id` (Pluggy's id) is unique; a stored row is updated in place (a pending purchase can change), and a row the bank stopped reporting is deleted only while still `A_REVISAR`.
+- **No date filter on the fetch.** Future installments come with the date they will be charged; filtering up to today drops them. Each installment is one bank transaction with `installmentNumber/totalInstallments`; the user's own installment entries count only the *remaining* ones (bank 5/11 = system 1/7).
+- **Invoice month** is the bank's `billForecastDate`, falling back to the due date of the bill in `billId`; `transacoes_banco.fatura` stores it at the card's due day, like `lancamentos.fatura`.
+- **Dates are converted to `America/Bahia`**: the bank sends UTC, and a purchase at 22:37 would otherwise land on the next day.
+- **Pagination is by cursor** (`GET /v2/transactions`; the page-based `/transactions` answers 410). The `after` value is base64 with `+ / =`: it is taken out of `next` and sent as a URI variable, never pasted raw.
+- **Only one user has it.** The Pluggy credentials belong to one person, so everything is gated by `pluggyUsuario` (that user's id): for anyone else `GET /banco/cartoes` answers an empty list and the other endpoints refuse. Missing Vault keys don't break startup — the integration just stays off.
+- Linking starts at the card's **current** invoice (`FaturaService.mesDaFaturaAtual`): earlier invoices were entered without the bank and are not reconciled. Re-linking or unlinking is refused once any row was reviewed.
+
 ## Fixed (recurring) entries are generated lazily
 
 A `FIXA` entry creates a `Recorrencia` (the template) plus the first occurrence. Further occurrences are **not** created up front — the series has no end. Every read that looks at a period calls `RecorrenciaService.gerarAte(usuario, date)` first:
@@ -77,7 +89,7 @@ There is no `config/security` package here. JWT validation, the filter, the secu
 
 `application.yml` only bootstraps `spring.config.import`:
 
-- **Vault** — `secret/application` (shared) and `secret/gastos-service` (`eurekaHostname` plus `gastosDB*` credentials)
+- **Vault** — `secret/application` (shared) and `secret/gastos-service` (`eurekaHostname`, `gastosDB*` credentials and, optionally, `pluggyClientID`/`pluggySecretID`/`pluggyItemId`/`pluggyUsuario` for the bank integration)
 - **Config Server** — `gastos-service/gastos-service.yml` in the config repo: port, context path, datasource
 
 `VAULT_TOKEN` is required and has no default; without it the failure surfaces much later as a misleading `${...} is malformed`.

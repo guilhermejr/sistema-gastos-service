@@ -4,6 +4,7 @@ import jakarta.persistence.*;
 import lombok.*;
 
 import java.io.Serializable;
+import java.time.LocalDate;
 
 @Getter
 @Setter
@@ -41,5 +42,11 @@ public class Cartao extends Auditoria implements Serializable, Ordenavel {
     /** Posição nas listas, escolhida pelo usuário (1 = primeiro). */
     @Column(nullable = false)
     private Integer ordem;
+
+    /** Id do cartão no banco (conta de crédito na Pluggy), quando ligado. */
+    private String bancoContaId;
+
+    /** Vencimento da primeira fatura cujas transações são buscadas no banco. */
+    private LocalDate bancoInicioFatura;
 
 }

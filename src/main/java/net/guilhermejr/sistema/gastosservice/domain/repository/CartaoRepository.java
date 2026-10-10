@@ -28,4 +28,9 @@ public interface CartaoRepository extends JpaRepository<Cartao, Long> {
 
     boolean existsByContaAndAtivoTrue(Conta conta);
 
+    Optional<Cartao> findByBancoContaId(String bancoContaId);
+
+    /** Cartões ligados ao banco, para a busca diária. */
+    List<Cartao> findAllByBancoContaIdNotNullAndAtivoTrue();
+
 }
