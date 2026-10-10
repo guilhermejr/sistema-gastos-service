@@ -77,4 +77,8 @@ public class TransacaoBanco extends Auditoria implements Serializable {
     @Column(nullable = false, length = 20)
     private SituacaoTransacaoBanco situacao;
 
+    /** Lançamento a que foi ligada (conciliada ou importada). Apagado o lançamento, fica null. */
+    @ManyToOne
+    private Lancamento lancamento;
+
 }

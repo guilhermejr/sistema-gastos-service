@@ -28,4 +28,7 @@ public class TransacaoBancoResponse {
     private String categoriaBanco;
     private SituacaoTransacaoBanco situacao;
 
+    /** Lançamento a que foi ligada; null enquanto não conciliada. */
+    private Long lancamentoId;
+
 }

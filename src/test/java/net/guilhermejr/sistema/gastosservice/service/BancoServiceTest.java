@@ -1,16 +1,24 @@
 package net.guilhermejr.sistema.gastosservice.service;
 
+import net.guilhermejr.sistema.gastosservice.api.mapper.CartaoMapper;
+import net.guilhermejr.sistema.gastosservice.api.mapper.TransacaoBancoMapper;
+import net.guilhermejr.sistema.gastosservice.api.response.SincronizacaoBancoResponse;
 import net.guilhermejr.sistema.gastosservice.client.PluggyClient;
+import net.guilhermejr.sistema.gastosservice.domain.entity.Cartao;
+import net.guilhermejr.sistema.gastosservice.domain.repository.CartaoRepository;
+import net.guilhermejr.sistema.gastosservice.domain.repository.TransacaoBancoRepository;
 import net.guilhermejr.sistema.gastosservice.domain.entity.TransacaoBanco;
 import net.guilhermejr.sistema.gastosservice.domain.enums.TipoLancamento;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
+import org.mockito.Mockito;
 
 import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.time.OffsetDateTime;
 import java.time.YearMonth;
+import java.util.List;
 import java.util.Map;
 
 public class BancoServiceTest {
@@ -114,6 +122,34 @@ public class BancoServiceTest {
         Assertions.assertTrue(BancoService.preencher(guardada, transacao("82.77", "2026-10-08T16:28:13Z", "PENDING", null), FATURA));
         Assertions.assertFalse(BancoService.preencher(guardada, transacao("82.77", "2026-10-08T16:28:13Z", "PENDING", null), FATURA));
         Assertions.assertTrue(BancoService.preencher(guardada, transacao("82.77", "2026-10-08T16:28:13Z", "POSTED", null), FATURA));
+
+    }
+
+    @Test
+    @DisplayName("A busca no banco guarda no cartão quando foi feita e o limite")
+    public void sincronizar_guarda_a_hora_e_o_limite() {
+
+        PluggyClient pluggyClient = Mockito.mock(PluggyClient.class);
+        CartaoRepository cartaoRepository = Mockito.mock(CartaoRepository.class);
+        BancoService bancoService = new BancoService(pluggyClient, cartaoRepository, Mockito.mock(TransacaoBancoRepository.class),
+                null, null, Mockito.mock(CartaoMapper.class), Mockito.mock(TransacaoBancoMapper.class), null, null);
+        Mockito.when(pluggyClient.faturas(Mockito.any(), Mockito.any())).thenReturn(List.of());
+        Mockito.when(pluggyClient.transacoes(Mockito.any(), Mockito.any())).thenReturn(List.of());
+        Mockito.when(pluggyClient.contas(Mockito.any())).thenReturn(List.of(
+                new PluggyClient.Conta("outro", "CREDIT", "OUTRO", "1111", new PluggyClient.DadosCredito(new BigDecimal("1000"), new BigDecimal("10"))),
+                new PluggyClient.Conta("c1", "CREDIT", "PERSONNALITE", "5943", new PluggyClient.DadosCredito(new BigDecimal("15500"), new BigDecimal("879.42")))));
+        Cartao cartao = new Cartao();
+        cartao.setBancoContaId("c1");
+        cartao.setBancoInicioFatura(FATURA);
+
+        SincronizacaoBancoResponse resposta = bancoService.sincronizar(cartao);
+
+        Assertions.assertNotNull(resposta.getSincronizado());
+        Assertions.assertEquals(resposta.getSincronizado(), cartao.getBancoSincronizado());
+        Assertions.assertEquals(new BigDecimal("15500"), cartao.getBancoLimite());
+        Assertions.assertEquals(new BigDecimal("879.42"), cartao.getBancoLimiteDisponivel());
+        Assertions.assertEquals(new BigDecimal("879.42"), resposta.getLimiteDisponivel());
+        Mockito.verify(cartaoRepository).save(cartao);
 
     }
 

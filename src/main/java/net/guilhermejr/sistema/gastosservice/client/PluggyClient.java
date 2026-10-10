@@ -152,7 +152,11 @@ public class PluggyClient {
 
     /** {@code type}: BANK ou CREDIT. */
     @JsonIgnoreProperties(ignoreUnknown = true)
-    public record Conta(String id, String type, String name, String number) {}
+    public record Conta(String id, String type, String name, String number, DadosCredito creditData) {}
+
+    /** Limite do cartão; o disponível já desconta as parcelas futuras. */
+    @JsonIgnoreProperties(ignoreUnknown = true)
+    public record DadosCredito(BigDecimal creditLimit, BigDecimal availableCreditLimit) {}
 
     @JsonIgnoreProperties(ignoreUnknown = true)
     public record Fatura(String id, OffsetDateTime dueDate) {}

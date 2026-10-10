@@ -4,7 +4,9 @@ import jakarta.persistence.*;
 import lombok.*;
 
 import java.io.Serializable;
+import java.math.BigDecimal;
 import java.time.LocalDate;
+import java.time.LocalDateTime;
 
 @Getter
 @Setter
@@ -48,5 +50,14 @@ public class Cartao extends Auditoria implements Serializable, Ordenavel {
 
     /** Vencimento da primeira fatura cujas transações são buscadas no banco. */
     private LocalDate bancoInicioFatura;
+
+    /** Última busca das transações no banco, em UTC. */
+    private LocalDateTime bancoSincronizado;
+
+    /** Limite total na última busca no banco. */
+    private BigDecimal bancoLimite;
+
+    /** Limite disponível na última busca no banco; o utilizado é a diferença. */
+    private BigDecimal bancoLimiteDisponivel;
 
 }

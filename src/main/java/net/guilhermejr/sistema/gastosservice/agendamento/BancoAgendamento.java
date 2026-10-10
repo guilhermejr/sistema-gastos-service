@@ -15,8 +15,8 @@ import org.springframework.stereotype.Component;
  * Busca diária das transações dos cartões ligados ao banco. Só em produção: no
  * desenvolvimento a busca é pelo botão, para não consultar o banco a cada subida.
  *
- * <p>O Meu Pluggy atualiza a conexão uma vez por dia, perto do meio-dia; às 14h os dados
- * do dia já chegaram.
+ * <p>O Meu Pluggy atualiza a conexão uma vez por dia, 24h depois da última atualização
+ * (hoje perto do meio-dia); às 8h, a sincronização traz os dados da véspera.
  */
 @Log4j2
 @RequiredArgsConstructor
@@ -29,7 +29,7 @@ public class BancoAgendamento {
     private final PluggyClient pluggyClient;
     private final BancoService bancoService;
 
-    @Scheduled(cron = "0 0 14 * * *", zone = "America/Bahia")
+    @Scheduled(cron = "0 0 8 * * *", zone = "America/Bahia")
     public void sincronizar() {
 
         for (Cartao cartao : cartaoRepository.findAllByBancoContaIdNotNullAndAtivoTrue()) {

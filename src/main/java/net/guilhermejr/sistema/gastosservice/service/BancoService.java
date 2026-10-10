@@ -25,9 +25,11 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.math.RoundingMode;
 import java.time.LocalDate;
+import java.time.LocalDateTime;
 import java.time.OffsetDateTime;
 import java.time.YearMonth;
 import java.time.ZoneId;
+import java.time.ZoneOffset;
 import java.util.*;
 import java.util.function.Function;
 import java.util.stream.Collectors;
@@ -98,6 +100,7 @@ public class BancoService {
             transacaoBancoRepository.deleteAll(anteriores);
             cartao.setBancoContaId(null);
             cartao.setBancoInicioFatura(null);
+            limparBanco(cartao);
             log.info("Cartão {} desligado do banco", cartaoId);
             return cartaoMapper.mapObject(cartaoRepository.save(cartao));
         }
@@ -113,6 +116,7 @@ public class BancoService {
 
         transacaoBancoRepository.deleteAll(anteriores);
         cartao.setBancoContaId(bancoContaId);
+        limparBanco(cartao);
         cartao.setBancoInicioFatura(CalendarioUtil.vencimentoNoMes(faturaService.mesDaFaturaAtual(cartao), cartao.getDiaVencimento()));
         log.info("Cartão {} ligado ao banco a partir da fatura de {}", cartaoId, cartao.getBancoInicioFatura());
         return cartaoMapper.mapObject(cartaoRepository.save(cartao));
@@ -180,11 +184,28 @@ public class BancoService {
                 .filter(t -> !vistas.contains(t.getBancoId()) && t.getSituacao() == SituacaoTransacaoBanco.A_REVISAR)
                 .toList();
         transacaoBancoRepository.deleteAll(sumiram);
+        pluggyClient.contas(chave).stream()
+                .filter(conta -> conta.id().equals(cartao.getBancoContaId()) && conta.creditData() != null)
+                .findFirst()
+                .ifPresent(conta -> {
+                    cartao.setBancoLimite(conta.creditData().creditLimit());
+                    cartao.setBancoLimiteDisponivel(conta.creditData().availableCreditLimit());
+                });
+        cartao.setBancoSincronizado(LocalDateTime.now(ZoneOffset.UTC));
+        cartaoRepository.save(cartao);
 
         log.info("Cartão {}: {} transações do banco ({} novas, {} atualizadas, {} removidas)",
                 cartao.getId(), vistas.size(), novas, atualizadas, sumiram.size());
-        return new SincronizacaoBancoResponse(novas, atualizadas, sumiram.size(), vistas.size());
+        return new SincronizacaoBancoResponse(novas, atualizadas, sumiram.size(), vistas.size(), cartao.getBancoSincronizado(),
+                cartao.getBancoLimite(), cartao.getBancoLimiteDisponivel());
 
+    }
+
+    /** Trocar ou desfazer a ligação apaga o que veio do cartão do banco anterior. */
+    private static void limparBanco(Cartao cartao) {
+        cartao.setBancoSincronizado(null);
+        cartao.setBancoLimite(null);
+        cartao.setBancoLimiteDisponivel(null);
     }
 
     /** As transações do banco na fatura do mês, da mais recente para a mais antiga. */

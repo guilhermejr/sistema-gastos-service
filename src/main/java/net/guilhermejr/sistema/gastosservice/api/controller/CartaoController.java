@@ -5,13 +5,18 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.log4j.Log4j2;
 import net.guilhermejr.sistema.gastosservice.api.request.CartaoBancoRequest;
 import net.guilhermejr.sistema.gastosservice.api.request.CartaoRequest;
+import net.guilhermejr.sistema.gastosservice.api.request.ConciliarRequest;
+import net.guilhermejr.sistema.gastosservice.api.request.ConfirmarConciliacaoRequest;
+import net.guilhermejr.sistema.gastosservice.api.request.CriarDoBancoRequest;
 import net.guilhermejr.sistema.gastosservice.api.request.PagamentoFaturaRequest;
 import net.guilhermejr.sistema.gastosservice.api.response.CartaoResponse;
+import net.guilhermejr.sistema.gastosservice.api.response.ConciliacaoResponse;
 import net.guilhermejr.sistema.gastosservice.api.response.FaturaResponse;
 import net.guilhermejr.sistema.gastosservice.api.response.SincronizacaoBancoResponse;
 import net.guilhermejr.sistema.gastosservice.api.response.TransacaoBancoResponse;
 import net.guilhermejr.sistema.gastosservice.service.BancoService;
 import net.guilhermejr.sistema.gastosservice.service.CartaoService;
+import net.guilhermejr.sistema.gastosservice.service.ConciliacaoService;
 import net.guilhermejr.sistema.gastosservice.service.FaturaService;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
@@ -30,6 +35,7 @@ public class CartaoController {
     private final CartaoService cartaoService;
     private final FaturaService faturaService;
     private final BancoService bancoService;
+    private final ConciliacaoService conciliacaoService;
 
     @GetMapping
     public ResponseEntity<List<CartaoResponse>> retornar(@RequestParam(defaultValue = "false") boolean ativos) {
@@ -141,6 +147,57 @@ public class CartaoController {
 
         log.info("Retornando transações do banco na fatura {}/{} do cartão: {}", mes, ano, id);
         return ResponseEntity.status(HttpStatus.OK).body(bancoService.fatura(id, ano, mes));
+
+    }
+
+    @GetMapping("/{id}/faturas/{ano}/{mes}/conciliacao")
+    public ResponseEntity<ConciliacaoResponse> conciliacao(@PathVariable Long id, @PathVariable Integer ano, @PathVariable Integer mes) {
+
+        log.info("Conciliando com o banco a fatura {}/{} do cartão: {}", mes, ano, id);
+        return ResponseEntity.status(HttpStatus.OK).body(conciliacaoService.conciliacao(id, ano, mes));
+
+    }
+
+    @PostMapping("/{id}/faturas/{ano}/{mes}/conciliacao/confirmar")
+    public ResponseEntity<ConciliacaoResponse> confirmarConciliacao(@PathVariable Long id, @PathVariable Integer ano, @PathVariable Integer mes,
+                                                                    @Valid @RequestBody ConfirmarConciliacaoRequest confirmarConciliacaoRequest) {
+
+        log.info("Confirmando conciliação da fatura {}/{} do cartão: {}", mes, ano, id);
+        return ResponseEntity.status(HttpStatus.OK).body(conciliacaoService.confirmar(id, ano, mes, confirmarConciliacaoRequest));
+
+    }
+
+    @PostMapping("/{id}/banco/transacoes/{transacaoId}/conciliar")
+    public ResponseEntity<ConciliacaoResponse> conciliarTransacao(@PathVariable Long id, @PathVariable Long transacaoId,
+                                                                  @Valid @RequestBody ConciliarRequest conciliarRequest) {
+
+        log.info("Conciliando transação do banco {} do cartão: {}", transacaoId, id);
+        return ResponseEntity.status(HttpStatus.OK).body(conciliacaoService.conciliar(id, transacaoId, conciliarRequest));
+
+    }
+
+    @PostMapping("/{id}/banco/transacoes/{transacaoId}/criar")
+    public ResponseEntity<ConciliacaoResponse> criarDaTransacao(@PathVariable Long id, @PathVariable Long transacaoId,
+                                                                @Valid @RequestBody CriarDoBancoRequest criarDoBancoRequest) {
+
+        log.info("Criando lançamento a partir da transação do banco {} do cartão: {}", transacaoId, id);
+        return ResponseEntity.status(HttpStatus.OK).body(conciliacaoService.criar(id, transacaoId, criarDoBancoRequest));
+
+    }
+
+    @PostMapping("/{id}/banco/transacoes/{transacaoId}/ignorar")
+    public ResponseEntity<ConciliacaoResponse> ignorarTransacao(@PathVariable Long id, @PathVariable Long transacaoId) {
+
+        log.info("Ignorando transação do banco {} do cartão: {}", transacaoId, id);
+        return ResponseEntity.status(HttpStatus.OK).body(conciliacaoService.ignorar(id, transacaoId));
+
+    }
+
+    @PostMapping("/{id}/banco/transacoes/{transacaoId}/desfazer")
+    public ResponseEntity<ConciliacaoResponse> desfazerTransacao(@PathVariable Long id, @PathVariable Long transacaoId) {
+
+        log.info("Desfazendo revisão da transação do banco {} do cartão: {}", transacaoId, id);
+        return ResponseEntity.status(HttpStatus.OK).body(conciliacaoService.desfazer(id, transacaoId));
 
     }
 
