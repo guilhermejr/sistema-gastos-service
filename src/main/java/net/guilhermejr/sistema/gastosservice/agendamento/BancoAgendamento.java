@@ -16,7 +16,9 @@ import org.springframework.stereotype.Component;
  * desenvolvimento a busca é pelo botão, para não consultar o banco a cada subida.
  *
  * <p>O Meu Pluggy atualiza a conexão uma vez por dia, 24h depois da última atualização
- * (hoje perto do meio-dia); às 8h, a sincronização traz os dados da véspera.
+ * (a hora muda conforme a última atualização manual); às 9h15, a sincronização traz os
+ * dados da última atualização. Este app não pode pedir a atualização: a Pluggy responde
+ * 400 "MeuPluggy item cant be updated" ao PATCH /items/{id}.
  */
 @Log4j2
 @RequiredArgsConstructor
@@ -29,7 +31,7 @@ public class BancoAgendamento {
     private final PluggyClient pluggyClient;
     private final BancoService bancoService;
 
-    @Scheduled(cron = "0 0 8 * * *", zone = "America/Bahia")
+    @Scheduled(cron = "0 15 9 * * *", zone = "America/Bahia")
     public void sincronizar() {
 
         for (Cartao cartao : cartaoRepository.findAllByBancoContaIdNotNullAndAtivoTrue()) {
