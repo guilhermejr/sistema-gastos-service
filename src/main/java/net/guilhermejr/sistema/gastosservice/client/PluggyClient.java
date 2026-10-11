@@ -78,6 +78,14 @@ public class PluggyClient {
 
     }
 
+    /** A conexão com o banco: quando a Pluggy buscou os dados, quando busca de novo e se deu erro. */
+    public Item item(String chave) {
+
+        return chamar(() -> restClient.get().uri("/items/{item}", itemId)
+                .header("X-API-KEY", chave).retrieve().body(Item.class));
+
+    }
+
     public List<Fatura> faturas(String chave, String contaId) {
 
         return chamar(() -> restClient.get().uri("/bills?accountId={conta}", contaId)
@@ -160,6 +168,14 @@ public class PluggyClient {
     /** Limite do cartão; o disponível já desconta as parcelas futuras. */
     @JsonIgnoreProperties(ignoreUnknown = true)
     public record DadosCredito(BigDecimal creditLimit, BigDecimal availableCreditLimit) {}
+
+    /**
+     * {@code status}: UPDATED, UPDATING, LOGIN_ERROR, OUTDATED ou WAITING_USER_INPUT. O Meu
+     * Pluggy atualiza sozinho uma vez por dia ({@code nextAutoSyncAt}), 24h depois da última.
+     */
+    @JsonIgnoreProperties(ignoreUnknown = true)
+    public record Item(String status, String executionStatus, OffsetDateTime lastUpdatedAt, OffsetDateTime nextAutoSyncAt,
+                       OffsetDateTime autoSyncDisabledAt, OffsetDateTime consentExpiresAt) {}
 
     @JsonIgnoreProperties(ignoreUnknown = true)
     public record Fatura(String id, OffsetDateTime dueDate) {}
