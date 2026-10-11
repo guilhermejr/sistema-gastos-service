@@ -3,6 +3,8 @@ package net.guilhermejr.sistema.gastosservice.api.response;
 import lombok.*;
 
 import java.math.BigDecimal;
+import java.time.LocalDate;
+import java.time.LocalDateTime;
 
 @Getter
 @Setter
@@ -25,5 +27,11 @@ public class ContaResponse {
     private Boolean somaSaldoGeral;
     private Boolean mostraSaldoPrevisto;
     private Boolean ativo;
+    /** Ligação com a conta corrente no banco; nulos quando não está ligada. */
+    private String bancoContaId;
+    private LocalDate bancoInicio;
+    /** Última busca no banco, em UTC. */
+    private LocalDateTime bancoSincronizado;
+    private BigDecimal bancoSaldo;
 
 }

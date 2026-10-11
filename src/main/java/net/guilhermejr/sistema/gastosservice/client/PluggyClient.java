@@ -150,9 +150,12 @@ public class PluggyClient {
     @JsonIgnoreProperties(ignoreUnknown = true)
     record PaginaTransacoes(List<Transacao> results, String next) {}
 
-    /** {@code type}: BANK ou CREDIT. */
+    /**
+     * {@code type}: BANK ou CREDIT. Na conta corrente do Itaú, {@code balance} já inclui o
+     * que está na aplicação automática.
+     */
     @JsonIgnoreProperties(ignoreUnknown = true)
-    public record Conta(String id, String type, String name, String number, DadosCredito creditData) {}
+    public record Conta(String id, String type, String name, String number, BigDecimal balance, DadosCredito creditData) {}
 
     /** Limite do cartão; o disponível já desconta as parcelas futuras. */
     @JsonIgnoreProperties(ignoreUnknown = true)
@@ -161,7 +164,10 @@ public class PluggyClient {
     @JsonIgnoreProperties(ignoreUnknown = true)
     public record Fatura(String id, OffsetDateTime dueDate) {}
 
-    /** No cartão, {@code amount} é positivo na compra e negativo no estorno e no pagamento. */
+    /**
+     * No cartão, {@code amount} é positivo na compra e negativo no estorno e no pagamento;
+     * na conta corrente, negativo na saída e positivo na entrada.
+     */
     @JsonIgnoreProperties(ignoreUnknown = true)
     public record Transacao(String id, String description, BigDecimal amount, OffsetDateTime date, String status,
                             String category, DadosCartao creditCardMetadata) {}

@@ -136,8 +136,8 @@ public class BancoServiceTest {
         Mockito.when(pluggyClient.faturas(Mockito.any(), Mockito.any())).thenReturn(List.of());
         Mockito.when(pluggyClient.transacoes(Mockito.any(), Mockito.any())).thenReturn(List.of());
         Mockito.when(pluggyClient.contas(Mockito.any())).thenReturn(List.of(
-                new PluggyClient.Conta("outro", "CREDIT", "OUTRO", "1111", new PluggyClient.DadosCredito(new BigDecimal("1000"), new BigDecimal("10"))),
-                new PluggyClient.Conta("c1", "CREDIT", "PERSONNALITE", "5943", new PluggyClient.DadosCredito(new BigDecimal("15500"), new BigDecimal("879.42")))));
+                new PluggyClient.Conta("outro", "CREDIT", "OUTRO", "1111", null, new PluggyClient.DadosCredito(new BigDecimal("1000"), new BigDecimal("10"))),
+                new PluggyClient.Conta("c1", "CREDIT", "PERSONNALITE", "5943", null, new PluggyClient.DadosCredito(new BigDecimal("15500"), new BigDecimal("879.42")))));
         Cartao cartao = new Cartao();
         cartao.setBancoContaId("c1");
         cartao.setBancoInicioFatura(FATURA);

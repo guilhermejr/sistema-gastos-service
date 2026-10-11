@@ -1,7 +1,9 @@
 package net.guilhermejr.sistema.gastosservice.domain.repository;
 
 import net.guilhermejr.sistema.gastosservice.domain.entity.Cartao;
+import net.guilhermejr.sistema.gastosservice.domain.entity.Conta;
 import net.guilhermejr.sistema.gastosservice.domain.entity.Lancamento;
+import net.guilhermejr.sistema.gastosservice.domain.entity.Movimentacao;
 import net.guilhermejr.sistema.gastosservice.domain.entity.TransacaoBanco;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
@@ -20,6 +22,22 @@ public interface TransacaoBancoRepository extends JpaRepository<TransacaoBanco, 
     List<TransacaoBanco> findAllByCartao(Cartao cartao);
 
     Optional<TransacaoBanco> findByIdAndCartao(Long id, Cartao cartao);
+
+    List<TransacaoBanco> findAllByConta(Conta conta);
+
+    Optional<TransacaoBanco> findByIdAndConta(Long id, Conta conta);
+
+    List<TransacaoBanco> findAllByContaAndDataBetweenOrderByDataDescIdDesc(Conta conta, LocalDate inicio, LocalDate fim);
+
+    boolean existsByMovimentacao(Movimentacao movimentacao);
+
+    /** Lançamentos da conta já ligados a uma transação do banco. */
+    @Query("SELECT t.lancamento.id FROM TransacaoBanco t WHERE t.conta = :conta AND t.lancamento IS NOT NULL")
+    Set<Long> lancamentosLigados(@Param("conta") Conta conta);
+
+    /** Movimentações já ligadas a uma transação do banco da conta. */
+    @Query("SELECT t.movimentacao.id FROM TransacaoBanco t WHERE t.conta = :conta AND t.movimentacao IS NOT NULL")
+    Set<Long> movimentacoesLigadas(@Param("conta") Conta conta);
 
     boolean existsByLancamento(Lancamento lancamento);
 

@@ -25,4 +25,8 @@ public interface ContaRepository extends JpaRepository<Conta, Long> {
 
     Optional<Conta> findByUsuarioAndNomeIgnoreCase(UUID usuario, String nome);
 
+    Optional<Conta> findByBancoContaId(String bancoContaId);
+
+    List<Conta> findAllByBancoContaIdNotNullAndAtivoTrue();
+
 }

@@ -5,6 +5,8 @@ import lombok.*;
 
 import java.io.Serializable;
 import java.math.BigDecimal;
+import java.time.LocalDate;
+import java.time.LocalDateTime;
 
 @Getter
 @Setter
@@ -43,5 +45,17 @@ public class Conta extends Auditoria implements Serializable, Ordenavel {
     /** Posição nas listas, escolhida pelo usuário (1 = primeira). */
     @Column(nullable = false)
     private Integer ordem;
+
+    /** Id da conta corrente no banco (conta BANK na Pluggy); null quando não está ligada. */
+    private String bancoContaId;
+
+    /** Primeiro dia cujas transações são buscadas no banco: o dia em que a conta foi ligada. */
+    private LocalDate bancoInicio;
+
+    /** Última busca das transações no banco, em UTC. */
+    private LocalDateTime bancoSincronizado;
+
+    /** Saldo no banco na última busca, com o que está na aplicação automática. */
+    private BigDecimal bancoSaldo;
 
 }

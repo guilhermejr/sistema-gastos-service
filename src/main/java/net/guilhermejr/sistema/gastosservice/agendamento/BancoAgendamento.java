@@ -4,15 +4,18 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.log4j.Log4j2;
 import net.guilhermejr.sistema.gastosservice.client.PluggyClient;
 import net.guilhermejr.sistema.gastosservice.domain.entity.Cartao;
+import net.guilhermejr.sistema.gastosservice.domain.entity.Conta;
 import net.guilhermejr.sistema.gastosservice.domain.repository.CartaoRepository;
+import net.guilhermejr.sistema.gastosservice.domain.repository.ContaRepository;
 import net.guilhermejr.sistema.gastosservice.service.BancoService;
+import net.guilhermejr.sistema.gastosservice.service.ContaBancoService;
 import org.springframework.context.annotation.Profile;
 import org.springframework.scheduling.annotation.EnableScheduling;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
 
 /**
- * Busca diária das transações dos cartões ligados ao banco. Só em produção: no
+ * Busca diária das transações dos cartões e das contas ligados ao banco. Só em produção: no
  * desenvolvimento a busca é pelo botão, para não consultar o banco a cada subida.
  *
  * <p>O Meu Pluggy atualiza a conexão uma vez por dia, 24h depois da última atualização
@@ -30,6 +33,8 @@ public class BancoAgendamento {
     private final CartaoRepository cartaoRepository;
     private final PluggyClient pluggyClient;
     private final BancoService bancoService;
+    private final ContaRepository contaRepository;
+    private final ContaBancoService contaBancoService;
 
     @Scheduled(cron = "0 15 9 * * *", zone = "America/Bahia")
     public void sincronizar() {
@@ -42,6 +47,16 @@ public class BancoAgendamento {
                 bancoService.sincronizar(cartao);
             } catch (Exception e) {
                 log.error("Erro ao buscar no banco as transações do cartão {}: {}", cartao.getId(), e.getMessage());
+            }
+        }
+        for (Conta conta : contaRepository.findAllByBancoContaIdNotNullAndAtivoTrue()) {
+            if (!pluggyClient.liberadoPara(conta.getUsuario())) {
+                continue;
+            }
+            try {
+                contaBancoService.sincronizar(conta);
+            } catch (Exception e) {
+                log.error("Erro ao buscar no banco as transações da conta {}: {}", conta.getId(), e.getMessage());
             }
         }
 

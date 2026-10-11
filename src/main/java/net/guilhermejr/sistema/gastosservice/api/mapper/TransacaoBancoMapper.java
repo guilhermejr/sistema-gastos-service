@@ -10,11 +10,12 @@ import java.util.List;
 @Component
 public class TransacaoBancoMapper extends ModelMapperConfig {
 
-    /** A estratégia STRICT não achata lancamento.id em lancamentoId sozinha. */
+    /** A estratégia STRICT não achata lancamento.id em lancamentoId sozinha (nem movimentacao.id). */
     public TransacaoBancoMapper() {
 
         this.modelMapper.createTypeMap(TransacaoBanco.class, TransacaoBancoResponse.class)
-                .addMappings(mapper -> mapper.map(src -> src.getLancamento().getId(), TransacaoBancoResponse::setLancamentoId));
+                .addMappings(mapper -> mapper.map(src -> src.getLancamento().getId(), TransacaoBancoResponse::setLancamentoId))
+                .addMappings(mapper -> mapper.map(src -> src.getMovimentacao().getId(), TransacaoBancoResponse::setMovimentacaoId));
 
     }
 

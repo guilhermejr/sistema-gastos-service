@@ -1,6 +1,7 @@
 package net.guilhermejr.sistema.gastosservice.domain.repository;
 
 import net.guilhermejr.sistema.gastosservice.domain.entity.Cartao;
+import net.guilhermejr.sistema.gastosservice.domain.entity.Conta;
 import net.guilhermejr.sistema.gastosservice.domain.entity.Categoria;
 import net.guilhermejr.sistema.gastosservice.domain.entity.Lancamento;
 import net.guilhermejr.sistema.gastosservice.domain.entity.Movimentacao;
@@ -31,6 +32,8 @@ public interface LancamentoRepository extends JpaRepository<Lancamento, Long> {
      * antiga e precisa continuar aparecendo na mesma fatura.
      */
     List<Lancamento> findAllByCartaoAndFaturaBetweenOrderByDataAscIdAsc(Cartao cartao, LocalDate inicio, LocalDate fim);
+
+    List<Lancamento> findAllByContaAndDataBetweenOrderByDataAscIdAsc(Conta conta, LocalDate inicio, LocalDate fim);
 
     boolean existsByCategoria(Categoria categoria);
 

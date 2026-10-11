@@ -266,7 +266,7 @@ public class BancoService {
                 t.getParcela(), t.getTotalParcelas(), t.getPendente(), t.getFinalCartao(), t.getCategoriaBanco()};
     }
 
-    private static LocalDate local(OffsetDateTime dataHora) {
+    static LocalDate local(OffsetDateTime dataHora) {
         return dataHora.atZoneSameInstant(FUSO).toLocalDate();
     }
 

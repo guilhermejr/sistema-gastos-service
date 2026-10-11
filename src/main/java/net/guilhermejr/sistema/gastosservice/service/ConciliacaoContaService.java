@@ -1,0 +1,384 @@
+package net.guilhermejr.sistema.gastosservice.service;
+
+import lombok.RequiredArgsConstructor;
+import lombok.extern.log4j.Log4j2;
+import net.guilhermejr.seguranca.jwt.AuthenticationCurrentUserService;
+import net.guilhermejr.sistema.gastosservice.api.mapper.TransacaoBancoMapper;
+import net.guilhermejr.sistema.gastosservice.api.request.ConciliarContaRequest;
+import net.guilhermejr.sistema.gastosservice.api.request.ConfirmarConciliacaoContaRequest;
+import net.guilhermejr.sistema.gastosservice.api.request.CriarDoBancoRequest;
+import net.guilhermejr.sistema.gastosservice.api.request.LancamentoRequest;
+import net.guilhermejr.sistema.gastosservice.api.response.ConciliacaoContaResponse;
+import net.guilhermejr.sistema.gastosservice.api.response.ItemContaResponse;
+import net.guilhermejr.sistema.gastosservice.api.response.LancamentoResponse;
+import net.guilhermejr.sistema.gastosservice.api.response.LinhaConciliacaoContaResponse;
+import net.guilhermejr.sistema.gastosservice.client.PluggyClient;
+import net.guilhermejr.sistema.gastosservice.domain.entity.Categoria;
+import net.guilhermejr.sistema.gastosservice.domain.entity.Conta;
+import net.guilhermejr.sistema.gastosservice.domain.entity.Lancamento;
+import net.guilhermejr.sistema.gastosservice.domain.entity.Movimentacao;
+import net.guilhermejr.sistema.gastosservice.domain.entity.TransacaoBanco;
+import net.guilhermejr.sistema.gastosservice.domain.enums.Escopo;
+import net.guilhermejr.sistema.gastosservice.domain.enums.Repeticao;
+import net.guilhermejr.sistema.gastosservice.domain.enums.SituacaoTransacaoBanco;
+import net.guilhermejr.sistema.gastosservice.domain.enums.SugestaoConciliacao;
+import net.guilhermejr.sistema.gastosservice.domain.repository.LancamentoRepository;
+import net.guilhermejr.sistema.gastosservice.domain.repository.MovimentacaoRepository;
+import net.guilhermejr.sistema.gastosservice.domain.repository.TransacaoBancoRepository;
+import net.guilhermejr.sistema.gastosservice.exception.ExceptionDefault;
+import net.guilhermejr.sistema.gastosservice.exception.ExceptionNotFound;
+import net.guilhermejr.sistema.gastosservice.util.ConciliadorConta;
+import net.guilhermejr.sistema.gastosservice.util.ConverteStringUtil;
+import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
+
+import java.math.BigDecimal;
+import java.math.RoundingMode;
+import java.time.Clock;
+import java.time.LocalDate;
+import java.time.YearMonth;
+import java.time.format.DateTimeFormatter;
+import java.util.*;
+import java.util.stream.Stream;
+
+/**
+ * Conciliação de um mês da conta corrente com o extrato do banco. Conciliar com um
+ * lançamento o dá como realizado na data do banco; com uma movimentação, só liga (ela já
+ * conta no saldo). As sugestões são calculadas a cada consulta, nada é gravado aqui.
+ */
+@Log4j2
+@RequiredArgsConstructor
+@Service
+public class ConciliacaoContaService {
+
+    /** Quantos dias antes e depois do mês os itens do sistema ainda servem de candidatos. */
+    private static final int MARGEM_DIAS = 10;
+    private static final DateTimeFormatter DATA_BRASIL = DateTimeFormatter.ofPattern("dd/MM/yyyy");
+
+    private final PluggyClient pluggyClient;
+    private final ContaService contaService;
+    private final SaldoService saldoService;
+    private final RecorrenciaService recorrenciaService;
+    private final LancamentoService lancamentoService;
+    private final LancamentoRepository lancamentoRepository;
+    private final MovimentacaoRepository movimentacaoRepository;
+    private final TransacaoBancoRepository transacaoBancoRepository;
+    private final TransacaoBancoMapper transacaoBancoMapper;
+    private final ConverteStringUtil converteStringUtil;
+    private final AuthenticationCurrentUserService authenticationCurrentUserService;
+    private final Clock clock;
+
+    @Transactional
+    public ConciliacaoContaResponse conciliacao(Long contaId, Integer ano, Integer mes) {
+
+        return conciliacao(contaLigada(contaId), converteStringUtil.toYearMonth(ano, mes));
+
+    }
+
+    /**
+     * Liga a transação a um lançamento ou a uma movimentação da conta. Com
+     * {@code corrigirValor}, o lançamento passa a ter o valor do banco — só ele.
+     */
+    @Transactional
+    public ConciliacaoContaResponse conciliar(Long contaId, Long transacaoId, ConciliarContaRequest conciliarContaRequest) {
+
+        Conta conta = contaLigada(contaId);
+        TransacaoBanco transacao = transacaoARevisar(conta, transacaoId);
+        ligar(conta, transacao, conciliarContaRequest.getLancamentoId(), conciliarContaRequest.getMovimentacaoId(),
+                Boolean.TRUE.equals(conciliarContaRequest.getCorrigirValor()));
+        return conciliacao(conta, YearMonth.from(transacao.getData()));
+
+    }
+
+    /** Confirma várias de uma vez (o que bateu e o que é para ignorar). Tudo ou nada. */
+    @Transactional
+    public ConciliacaoContaResponse confirmar(Long contaId, Integer ano, Integer mes, ConfirmarConciliacaoContaRequest confirmarConciliacaoContaRequest) {
+
+        Conta conta = contaLigada(contaId);
+        for (ConfirmarConciliacaoContaRequest.Item item : confirmarConciliacaoContaRequest.getItens()) {
+            TransacaoBanco transacao = transacaoARevisar(conta, item.getTransacaoId());
+            if (item.getLancamentoId() == null && item.getMovimentacaoId() == null) {
+                ignorar(transacao);
+            } else {
+                ligar(conta, transacao, item.getLancamentoId(), item.getMovimentacaoId(), false);
+            }
+        }
+        log.info("Conta {}: {} transações do banco confirmadas", contaId, confirmarConciliacaoContaRequest.getItens().size());
+        return conciliacao(conta, converteStringUtil.toYearMonth(ano, mes));
+
+    }
+
+    /** Cria um lançamento avulso, já realizado, com a data e o valor do banco. */
+    @Transactional
+    public ConciliacaoContaResponse criar(Long contaId, Long transacaoId, CriarDoBancoRequest criarDoBancoRequest) {
+
+        Conta conta = contaLigada(contaId);
+        TransacaoBanco transacao = transacaoARevisar(conta, transacaoId);
+        LancamentoRequest lancamentoRequest = LancamentoRequest.builder()
+                .tipo(transacao.getTipo())
+                .descricao(criarDoBancoRequest.getDescricao().trim())
+                .valor(moeda(transacao.getValor()))
+                .data(transacao.getData().format(DATA_BRASIL))
+                .categoriaId(criarDoBancoRequest.getCategoriaId())
+                .contaId(conta.getId())
+                .realizado(true)
+                .repeticao(Repeticao.UNICA)
+                .build();
+        List<LancamentoResponse> criados = lancamentoService.inserir(lancamentoRequest);
+        transacao.setLancamento(lancamentoService.lancamentoDoUsuario(criados.get(0).getId()));
+        transacao.setMovimentacao(null);
+        transacao.setSituacao(SituacaoTransacaoBanco.IMPORTADA);
+        transacaoBancoRepository.save(transacao);
+        return conciliacao(conta, YearMonth.from(transacao.getData()));
+
+    }
+
+    @Transactional
+    public ConciliacaoContaResponse ignorar(Long contaId, Long transacaoId) {
+
+        Conta conta = contaLigada(contaId);
+        TransacaoBanco transacao = transacaoARevisar(conta, transacaoId);
+        ignorar(transacao);
+        return conciliacao(conta, YearMonth.from(transacao.getData()));
+
+    }
+
+    /** Volta a transação para revisar. O lançamento continua como está (realizado, se foi). */
+    @Transactional
+    public ConciliacaoContaResponse desfazer(Long contaId, Long transacaoId) {
+
+        Conta conta = contaLigada(contaId);
+        TransacaoBanco transacao = transacaoBancoRepository.findByIdAndConta(transacaoId, conta)
+                .orElseThrow(() -> new ExceptionNotFound("Transação do banco não encontrada: " + transacaoId));
+        if (aRevisar(transacao)) {
+            throw new ExceptionDefault("Esta transação ainda não foi revisada.");
+        }
+        transacao.setSituacao(SituacaoTransacaoBanco.A_REVISAR);
+        transacao.setLancamento(null);
+        transacao.setMovimentacao(null);
+        transacaoBancoRepository.save(transacao);
+        return conciliacao(conta, YearMonth.from(transacao.getData()));
+
+    }
+
+    private ConciliacaoContaResponse conciliacao(Conta conta, YearMonth mes) {
+
+        LocalDate inicio = mes.atDay(1).isBefore(conta.getBancoInicio()) ? conta.getBancoInicio() : mes.atDay(1);
+        LocalDate fim = mes.atEndOfMonth();
+        // As fixas do mês (e da margem) precisam existir para casar com o banco.
+        recorrenciaService.gerarAte(conta.getUsuario(), fim.plusDays(MARGEM_DIAS));
+
+        List<TransacaoBanco> transacoes = transacaoBancoRepository.findAllByContaAndDataBetweenOrderByDataDescIdDesc(conta, mes.atDay(1), fim);
+        List<TransacaoBanco> aRevisar = transacoes.stream().filter(ConciliacaoContaService::aRevisar).toList();
+
+        // Candidatos: o que não está ligado, de perto do mês. O realizado antes da ligação
+        // ficou de fora da busca no banco e não tem com quem casar.
+        Set<Long> lancamentosLigados = transacaoBancoRepository.lancamentosLigados(conta);
+        Set<Long> movimentacoesLigadas = transacaoBancoRepository.movimentacoesLigadas(conta);
+        LocalDate de = inicio.minusDays(MARGEM_DIAS);
+        LocalDate ate = fim.plusDays(MARGEM_DIAS);
+        List<ConciliadorConta.Item> itens = Stream.concat(
+                lancamentoRepository.findAllByContaAndDataBetweenOrderByDataAscIdAsc(conta, de, ate).stream()
+                        .filter(l -> !lancamentosLigados.contains(l.getId()))
+                        .filter(l -> !(Boolean.TRUE.equals(l.getRealizado()) && l.getData().isBefore(conta.getBancoInicio())))
+                        .map(ConciliadorConta.Item::de),
+                movimentacaoRepository.findDaContaNoPeriodo(conta.getUsuario(), conta, de, ate).stream()
+                        .filter(m -> !movimentacoesLigadas.contains(m.getId()) && !m.getData().isBefore(conta.getBancoInicio()))
+                        .map(m -> ConciliadorConta.Item.de(m, conta))).toList();
+
+        ConciliadorConta.Resultado resultado = ConciliadorConta.sugerir(aRevisar, itens);
+
+        List<LinhaConciliacaoContaResponse> linhas = new ArrayList<>();
+        resultado.sugestoes().forEach(s -> linhas.add(new LinhaConciliacaoContaResponse(transacaoBancoMapper.mapObject(s.transacao()),
+                s.tipo(), s.candidatos().stream().map(ConciliacaoContaService::item).toList(), null,
+                s.tipo() == SugestaoConciliacao.CRIAR ? categoriaSugerida(conta, s.transacao()) : null)));
+        transacoes.stream().filter(t -> !aRevisar(t)).forEach(t -> linhas.add(new LinhaConciliacaoContaResponse(transacaoBancoMapper.mapObject(t),
+                null, List.of(), ligado(t), null)));
+
+        // Só no sistema: do mês, a partir da ligação e até hoje — o futuro ainda não aconteceu.
+        LocalDate hoje = LocalDate.now(clock);
+        LocalDate limite = fim.isAfter(hoje) ? hoje : fim;
+        List<ItemContaResponse> semPar = resultado.semPar().stream()
+                .filter(i -> !i.data().isBefore(inicio) && !i.data().isAfter(limite))
+                .map(ConciliacaoContaService::item).toList();
+
+        return new ConciliacaoContaResponse(linhas, semPar, conta.getBancoSaldo(), saldoService.saldo(conta),
+                conta.getBancoSincronizado(), conta.getBancoInicio());
+
+    }
+
+    private void ligar(Conta conta, TransacaoBanco transacao, Long lancamentoId, Long movimentacaoId, boolean corrigirValor) {
+
+        if ((lancamentoId == null) == (movimentacaoId == null)) {
+            throw new ExceptionDefault("Informe um lançamento ou uma movimentação.");
+        }
+        if (movimentacaoId != null) {
+            Movimentacao movimentacao = movimentacaoLivre(conta, transacao, movimentacaoId);
+            transacao.setMovimentacao(movimentacao);
+            transacao.setLancamento(null);
+        } else {
+            Lancamento lancamento = lancamentoLivre(conta, transacao, lancamentoId);
+            if (corrigirValor && lancamento.getValor().compareTo(transacao.getValor()) != 0) {
+                if (lancamento.getParcelamento() != null) {
+                    throw new ExceptionDefault("O valor de uma parcela não é corrigido por aqui. Edite a compra parcelada.");
+                }
+                lancamentoService.atualizar(lancamento.getId(), requisicao(lancamento, conta, transacao), Escopo.UNICO);
+                log.info("Lançamento {} corrigido para o valor do banco: {}", lancamento.getId(), transacao.getValor());
+            }
+            // O dinheiro saiu (ou entrou) no dia em que o banco diz.
+            lancamento.setRealizado(true);
+            lancamento.setData(transacao.getData());
+            lancamentoRepository.save(lancamento);
+            transacao.setLancamento(lancamento);
+            transacao.setMovimentacao(null);
+        }
+        transacao.setSituacao(SituacaoTransacaoBanco.CONCILIADA);
+        transacaoBancoRepository.save(transacao);
+
+    }
+
+    private void ignorar(TransacaoBanco transacao) {
+
+        transacao.setLancamento(null);
+        transacao.setMovimentacao(null);
+        transacao.setSituacao(SituacaoTransacaoBanco.IGNORADA);
+        transacaoBancoRepository.save(transacao);
+
+    }
+
+    /** O lançamento precisa ser da conta, do mesmo tipo e ainda sem transação ligada. */
+    private Lancamento lancamentoLivre(Conta conta, TransacaoBanco transacao, Long lancamentoId) {
+
+        Lancamento lancamento = lancamentoService.lancamentoDoUsuario(lancamentoId);
+        if (lancamento.getConta() == null || !lancamento.getConta().getId().equals(conta.getId())) {
+            throw new ExceptionDefault("O lançamento não é desta conta.");
+        }
+        if (lancamento.getTipo() != transacao.getTipo()) {
+            throw new ExceptionDefault("O lançamento e a transação do banco não são do mesmo tipo.");
+        }
+        if (transacaoBancoRepository.existsByLancamento(lancamento)) {
+            throw new ExceptionDefault("O lançamento já está ligado a outra transação do banco.");
+        }
+        return lancamento;
+
+    }
+
+    /** A movimentação precisa mexer nesta conta, no mesmo sentido, com o mesmo valor, e estar livre. */
+    private Movimentacao movimentacaoLivre(Conta conta, TransacaoBanco transacao, Long movimentacaoId) {
+
+        Movimentacao movimentacao = movimentacaoRepository.findByIdAndUsuario(movimentacaoId, conta.getUsuario())
+                .orElseThrow(() -> new ExceptionNotFound("Movimentação não encontrada: " + movimentacaoId));
+        boolean daConta = Stream.of(movimentacao.getContaOrigem(), movimentacao.getContaDestino())
+                .anyMatch(c -> c != null && c.getId().equals(conta.getId()));
+        if (!daConta) {
+            throw new ExceptionDefault("A movimentação não é desta conta.");
+        }
+        ConciliadorConta.Item item = ConciliadorConta.Item.de(movimentacao, conta);
+        if (item.tipo() != transacao.getTipo()) {
+            throw new ExceptionDefault("A movimentação e a transação do banco não vão no mesmo sentido.");
+        }
+        if (movimentacao.getValor().compareTo(transacao.getValor()) != 0) {
+            throw new ExceptionDefault("A movimentação e a transação do banco têm valores diferentes.");
+        }
+        if (transacaoBancoRepository.existsByMovimentacao(movimentacao)) {
+            throw new ExceptionDefault("A movimentação já está ligada a outra transação do banco.");
+        }
+        return movimentacao;
+
+    }
+
+    private Long categoriaSugerida(Conta conta, TransacaoBanco transacao) {
+
+        if (transacao.getCategoriaBanco() == null) {
+            return null;
+        }
+        return transacaoBancoRepository.findFirstByUsuarioAndCategoriaBancoAndLancamentoNotNullOrderByAtualizadoDesc(
+                        conta.getUsuario(), transacao.getCategoriaBanco())
+                .map(t -> t.getLancamento().getCategoria())
+                .filter(categoria -> categoria.getAtivo() && categoria.getTipo() == transacao.getTipo())
+                .map(Categoria::getId).orElse(null);
+
+    }
+
+    private TransacaoBanco transacaoARevisar(Conta conta, Long transacaoId) {
+
+        TransacaoBanco transacao = transacaoBancoRepository.findByIdAndConta(transacaoId, conta)
+                .orElseThrow(() -> new ExceptionNotFound("Transação do banco não encontrada: " + transacaoId));
+        if (!aRevisar(transacao)) {
+            throw new ExceptionDefault("Esta transação já foi revisada.");
+        }
+        return transacao;
+
+    }
+
+    private Conta contaLigada(Long contaId) {
+
+        if (!pluggyClient.liberadoPara(authenticationCurrentUserService.getCurrentUser().getId())) {
+            throw new ExceptionDefault("A integração com o banco não está disponível.");
+        }
+        Conta conta = contaService.contaDoUsuario(contaId);
+        if (conta.getBancoContaId() == null) {
+            throw new ExceptionDefault("A conta não está ligada ao banco.");
+        }
+        return conta;
+
+    }
+
+    private static ItemContaResponse ligado(TransacaoBanco transacao) {
+        if (transacao.getLancamento() != null) {
+            return item(ConciliadorConta.Item.de(transacao.getLancamento()));
+        }
+        return transacao.getMovimentacao() == null ? null : item(ConciliadorConta.Item.de(transacao.getMovimentacao(), transacao.getConta()));
+    }
+
+    private static ItemContaResponse item(ConciliadorConta.Item item) {
+        Lancamento l = item.lancamento();
+        if (l != null) {
+            return new ItemContaResponse(l.getId(), null, item.tipo(), l.getDescricao(), item.valor(), item.data(), l.getRealizado(),
+                    l.getRecorrencia() == null ? null : l.getRecorrencia().getId(), l.getParcela(), l.getTotalParcelas());
+        }
+        Movimentacao m = item.movimentacao();
+        return new ItemContaResponse(null, m.getId(), item.tipo(), descricao(m), item.valor(), item.data(), true, null, null, null);
+    }
+
+    /** Movimentação sem descrição: o que ela é, para quem olha a conta. */
+    private static String descricao(Movimentacao m) {
+        if (m.getDescricao() != null && !m.getDescricao().isBlank()) {
+            return m.getDescricao();
+        }
+        return switch (m.getTipo()) {
+            case DEPOSITO -> "Depósito";
+            case SAQUE -> "Saque";
+            case PAGAMENTO_FATURA -> "Pagamento da fatura" + (m.getCartao() == null ? "" : " " + m.getCartao().getNome());
+            case TRANSFERENCIA -> "Transferência" + (m.getContaOrigem() != null && m.getContaDestino() != null
+                    ? " " + m.getContaOrigem().getNome() + " → " + m.getContaDestino().getNome() : "");
+        };
+    }
+
+    /** O mesmo lançamento, com o valor, a data e a realização do banco — para LancamentoService.atualizar. */
+    private static LancamentoRequest requisicao(Lancamento lancamento, Conta conta, TransacaoBanco transacao) {
+
+        return LancamentoRequest.builder()
+                .tipo(lancamento.getTipo())
+                .descricao(lancamento.getDescricao())
+                .valor(moeda(transacao.getValor()))
+                .data(transacao.getData().format(DATA_BRASIL))
+                .categoriaId(lancamento.getCategoria().getId())
+                .contaId(conta.getId())
+                .realizado(true)
+                .build();
+
+    }
+
+    /** 1234.5 → "1234,50", o formato que os requests de lançamento recebem. */
+    private static String moeda(BigDecimal valor) {
+        return valor.setScale(2, RoundingMode.HALF_UP).toPlainString().replace('.', ',');
+    }
+
+    private static boolean aRevisar(TransacaoBanco transacao) {
+        return transacao.getSituacao() == SituacaoTransacaoBanco.A_REVISAR
+                || (transacao.getSituacao() != SituacaoTransacaoBanco.IGNORADA
+                && transacao.getLancamento() == null && transacao.getMovimentacao() == null);
+    }
+
+}

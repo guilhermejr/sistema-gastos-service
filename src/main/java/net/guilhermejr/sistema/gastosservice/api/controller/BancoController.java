@@ -3,7 +3,9 @@ package net.guilhermejr.sistema.gastosservice.api.controller;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.log4j.Log4j2;
 import net.guilhermejr.sistema.gastosservice.api.response.CartaoBancoResponse;
+import net.guilhermejr.sistema.gastosservice.api.response.ContaBancoResponse;
 import net.guilhermejr.sistema.gastosservice.service.BancoService;
+import net.guilhermejr.sistema.gastosservice.service.ContaBancoService;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
@@ -21,12 +23,21 @@ import java.util.List;
 public class BancoController {
 
     private final BancoService bancoService;
+    private final ContaBancoService contaBancoService;
 
     @GetMapping("/cartoes")
     public ResponseEntity<List<CartaoBancoResponse>> cartoes() {
 
         log.info("Retornando cartões do banco");
         return ResponseEntity.status(HttpStatus.OK).body(bancoService.cartoesDoBanco());
+
+    }
+
+    @GetMapping("/contas")
+    public ResponseEntity<List<ContaBancoResponse>> contas() {
+
+        log.info("Retornando contas correntes do banco");
+        return ResponseEntity.status(HttpStatus.OK).body(contaBancoService.contasDoBanco());
 
     }
 

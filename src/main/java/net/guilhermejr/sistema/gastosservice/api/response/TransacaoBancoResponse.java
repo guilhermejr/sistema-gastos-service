@@ -30,5 +30,7 @@ public class TransacaoBancoResponse {
 
     /** Lançamento a que foi ligada; null enquanto não conciliada. */
     private Long lancamentoId;
+    /** Só na conta: movimentação a que foi ligada. */
+    private Long movimentacaoId;
 
 }

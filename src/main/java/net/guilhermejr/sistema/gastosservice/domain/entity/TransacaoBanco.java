@@ -10,8 +10,8 @@ import java.math.BigDecimal;
 import java.time.LocalDate;
 
 /**
- * Uma transação do cartão como o banco a informa (Open Finance, via Pluggy). Não mexe
- * em fatura nem em saldo: serve para conciliar com os lançamentos.
+ * Uma transação do cartão ou da conta corrente como o banco a informa (Open Finance, via
+ * Pluggy). Não mexe em fatura nem em saldo: serve para conciliar com os lançamentos.
  *
  * <p>Cada parcela de uma compra parcelada é uma transação. {@link #fatura} é o
  * vencimento da fatura em que o banco a pôs, no dia de vencimento do cartão — o mesmo
@@ -33,14 +33,18 @@ public class TransacaoBanco extends Auditoria implements Serializable {
     @EqualsAndHashCode.Include
     private Long id;
 
-    @ManyToOne(optional = false)
+    /** De um cartão ou de uma conta, nunca dos dois. */
+    @ManyToOne
     private Cartao cartao;
+
+    @ManyToOne
+    private Conta conta;
 
     /** Id da transação na Pluggy. */
     @Column(nullable = false)
     private String bancoId;
 
-    /** D = compra, R = estorno ou pagamento. */
+    /** No cartão, D = compra e R = estorno ou pagamento; na conta, D = saída e R = entrada. */
     @Enumerated(EnumType.STRING)
     @Column(nullable = false, length = 1)
     private TipoLancamento tipo;
@@ -58,7 +62,7 @@ public class TransacaoBanco extends Auditoria implements Serializable {
     /** Data da compra original, nas parcelas. */
     private LocalDate dataCompra;
 
-    @Column(nullable = false)
+    /** Só no cartão. */
     private LocalDate fatura;
 
     private Integer parcela;
@@ -80,5 +84,9 @@ public class TransacaoBanco extends Auditoria implements Serializable {
     /** Lançamento a que foi ligada (conciliada ou importada). Apagado o lançamento, fica null. */
     @ManyToOne
     private Lancamento lancamento;
+
+    /** Só na conta: movimentação a que foi ligada (transferência, pagamento de fatura). */
+    @ManyToOne
+    private Movimentacao movimentacao;
 
 }
