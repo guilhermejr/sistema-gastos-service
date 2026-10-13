@@ -59,14 +59,26 @@ public class BancoServiceTest {
     }
 
     @Test
-    @DisplayName("A data é a do fuso local: compra às 22h37 de 09/10 chega como 01h37 UTC de 10/10")
+    @DisplayName("Data e hora no fuso local: compra às 19h37 de 09/10 chega como 01h37Z de 10/10 (3h adiantada)")
     public void data_no_fuso_local() {
 
         TransacaoBanco guardada = new TransacaoBanco();
         BancoService.preencher(guardada, transacao("68.40", "2026-10-10T01:37:18.000Z", "PENDING", null), FATURA);
 
         Assertions.assertEquals(LocalDate.of(2026, 10, 9), guardada.getData());
-        Assertions.assertEquals(LocalTime.of(22, 37), guardada.getHora());
+        Assertions.assertEquals(LocalTime.of(19, 37), guardada.getHora());
+
+    }
+
+    @Test
+    @DisplayName("Compra entre 21h e meia-noite fica no dia em que foi feita")
+    public void compra_da_noite_no_dia_certo() {
+
+        TransacaoBanco guardada = new TransacaoBanco();
+        BancoService.preencher(guardada, transacao("69.90", "2026-09-29T03:11:03Z", "PENDING", null), FATURA);
+
+        Assertions.assertEquals(LocalDate.of(2026, 9, 28), guardada.getData());
+        Assertions.assertEquals(LocalTime.of(21, 11), guardada.getHora());
 
     }
 

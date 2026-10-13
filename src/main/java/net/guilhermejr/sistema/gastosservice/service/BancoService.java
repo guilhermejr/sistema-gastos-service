@@ -251,9 +251,9 @@ public class BancoService {
         guardada.setTipo(tipo);
         guardada.setDescricao(descricao.length() > 255 ? descricao.substring(0, 255) : descricao);
         guardada.setValor(transacao.amount().abs().setScale(2, RoundingMode.HALF_UP));
-        guardada.setData(local(transacao.date()));
+        guardada.setData(localCartao(transacao.date()).toLocalDate());
         guardada.setHora(hora(transacao.date()));
-        guardada.setDataCompra(dados.purchaseDate() == null ? null : local(dados.purchaseDate()));
+        guardada.setDataCompra(dados.purchaseDate() == null ? null : localCartao(dados.purchaseDate()).toLocalDate());
         guardada.setFatura(fatura);
         guardada.setParcela(parcelada ? dados.installmentNumber() : null);
         guardada.setTotalParcelas(parcelada ? dados.totalInstallments() : null);
@@ -273,10 +273,24 @@ public class BancoService {
         return dataHora.atZoneSameInstant(FUSO).toLocalDate();
     }
 
-    /** Meia-noite é o banco sem hora (a data da parcela), não uma compra feita à meia-noite. */
+    /**
+     * Data e hora de uma transação do cartão no fuso local. A hora da compra chega 3h
+     * adiantada: a feita às 19h42 em Salvador vem como 01h42Z, não 22h42Z. Meia-noite em
+     * ponto (03h00Z) é o banco sem hora — a data da parcela —, e essa não tem o desvio.
+     */
+    static LocalDateTime localCartao(OffsetDateTime dataHora) {
+        LocalDateTime local = dataHora.atZoneSameInstant(FUSO).toLocalDateTime();
+        return semHora(local) ? local : local.minusHours(3);
+    }
+
+    /** Vazia quando o banco não informa a hora (meia-noite em ponto). */
     static LocalTime hora(OffsetDateTime dataHora) {
-        LocalTime hora = dataHora.atZoneSameInstant(FUSO).toLocalTime().truncatedTo(ChronoUnit.MINUTES);
-        return hora.equals(LocalTime.MIDNIGHT) ? null : hora;
+        LocalDateTime local = dataHora.atZoneSameInstant(FUSO).toLocalDateTime();
+        return semHora(local) ? null : localCartao(dataHora).toLocalTime().truncatedTo(ChronoUnit.MINUTES);
+    }
+
+    private static boolean semHora(LocalDateTime local) {
+        return local.toLocalTime().equals(LocalTime.MIDNIGHT);
     }
 
     private void verificarLiberado() {
