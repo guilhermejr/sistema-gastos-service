@@ -26,10 +26,12 @@ import org.springframework.transaction.annotation.Transactional;
 import java.math.RoundingMode;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
+import java.time.LocalTime;
 import java.time.OffsetDateTime;
 import java.time.YearMonth;
 import java.time.ZoneId;
 import java.time.ZoneOffset;
+import java.time.temporal.ChronoUnit;
 import java.util.*;
 import java.util.function.Function;
 import java.util.stream.Collectors;
@@ -250,6 +252,7 @@ public class BancoService {
         guardada.setDescricao(descricao.length() > 255 ? descricao.substring(0, 255) : descricao);
         guardada.setValor(transacao.amount().abs().setScale(2, RoundingMode.HALF_UP));
         guardada.setData(local(transacao.date()));
+        guardada.setHora(hora(transacao.date()));
         guardada.setDataCompra(dados.purchaseDate() == null ? null : local(dados.purchaseDate()));
         guardada.setFatura(fatura);
         guardada.setParcela(parcelada ? dados.installmentNumber() : null);
@@ -262,12 +265,18 @@ public class BancoService {
     }
 
     private static Object[] valores(TransacaoBanco t) {
-        return new Object[]{t.getTipo(), t.getDescricao(), t.getValor(), t.getData(), t.getDataCompra(), t.getFatura(),
+        return new Object[]{t.getTipo(), t.getDescricao(), t.getValor(), t.getData(), t.getHora(), t.getDataCompra(), t.getFatura(),
                 t.getParcela(), t.getTotalParcelas(), t.getPendente(), t.getFinalCartao(), t.getCategoriaBanco()};
     }
 
     static LocalDate local(OffsetDateTime dataHora) {
         return dataHora.atZoneSameInstant(FUSO).toLocalDate();
+    }
+
+    /** Meia-noite é o banco sem hora (a data da parcela), não uma compra feita à meia-noite. */
+    static LocalTime hora(OffsetDateTime dataHora) {
+        LocalTime hora = dataHora.atZoneSameInstant(FUSO).toLocalTime().truncatedTo(ChronoUnit.MINUTES);
+        return hora.equals(LocalTime.MIDNIGHT) ? null : hora;
     }
 
     private void verificarLiberado() {

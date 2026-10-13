@@ -16,6 +16,7 @@ import org.mockito.Mockito;
 
 import java.math.BigDecimal;
 import java.time.LocalDate;
+import java.time.LocalTime;
 import java.time.OffsetDateTime;
 import java.time.YearMonth;
 import java.util.List;
@@ -65,6 +66,19 @@ public class BancoServiceTest {
         BancoService.preencher(guardada, transacao("68.40", "2026-10-10T01:37:18.000Z", "PENDING", null), FATURA);
 
         Assertions.assertEquals(LocalDate.of(2026, 10, 9), guardada.getData());
+        Assertions.assertEquals(LocalTime.of(22, 37), guardada.getHora());
+
+    }
+
+    @Test
+    @DisplayName("Parcela chega à meia-noite (03h UTC): fica sem hora")
+    public void parcela_sem_hora() {
+
+        TransacaoBanco guardada = new TransacaoBanco();
+        BancoService.preencher(guardada, transacao("999.90", "2026-10-27T03:00:00Z", "PENDING", parcela(5, 11)), FATURA);
+
+        Assertions.assertEquals(LocalDate.of(2026, 10, 27), guardada.getData());
+        Assertions.assertNull(guardada.getHora());
 
     }
 

@@ -8,6 +8,7 @@ import net.guilhermejr.sistema.gastosservice.domain.enums.TipoLancamento;
 import java.io.Serializable;
 import java.math.BigDecimal;
 import java.time.LocalDate;
+import java.time.LocalTime;
 
 /**
  * Uma transação do cartão ou da conta corrente como o banco a informa (Open Finance, via
@@ -58,6 +59,9 @@ public class TransacaoBanco extends Auditoria implements Serializable {
 
     @Column(nullable = false)
     private LocalDate data;
+
+    /** Só no cartão, quando o banco informa: vazia se a transação vem à meia-noite (as parcelas). */
+    private LocalTime hora;
 
     /** Data da compra original, nas parcelas. */
     private LocalDate dataCompra;

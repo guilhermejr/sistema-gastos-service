@@ -6,6 +6,7 @@ import net.guilhermejr.sistema.gastosservice.domain.enums.TipoLancamento;
 
 import java.math.BigDecimal;
 import java.time.LocalDate;
+import java.time.LocalTime;
 
 @Getter
 @Setter
@@ -19,6 +20,7 @@ public class TransacaoBancoResponse {
     private String descricao;
     private BigDecimal valor;
     private LocalDate data;
+    private LocalTime hora;
     private LocalDate dataCompra;
     private LocalDate fatura;
     private Integer parcela;
