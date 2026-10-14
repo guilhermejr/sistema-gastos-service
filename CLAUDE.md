@@ -70,6 +70,10 @@ A `FIXA` entry creates a `Recorrencia` (the template) plus the first occurrence.
 
 Installments (`PARCELADA`) are all created at once, one per month on the same day, sharing a `parcelamento` UUID. The total is split in cents with the remainder on the **first** installment, so the sum is exact. `escopo=SEGUINTES` on an installment propagates description, category and account/card — not value or date.
 
+## Weekly due-date push
+
+`AvisoAgendamento` (**`prod` profile only**, Mondays 08:00 `America/Bahia`) sends one push through `notificacao-service`'s generic endpoint (`NotificacaoClient` → `/supermercado/enviar-notificacao-generica`; this service has no route of its own there). The message comes from `AvisoSemanalService.montar`: everything due from today to Sunday, overdue included, from `DashboardService.agendaAte` — the same items as the dashboard's "a pagar" (account expenses + invoices) and "a receber". Nothing due → no push. Pushover reaches one person, so it covers one user: `avisoUsuario` in Vault, falling back to `pluggyUsuario`; neither → off. The message is cut to Pushover's 1024-character limit ("… e mais N").
+
 ## Deactivation rules
 
 Accounts, cards and categories are deactivated, not deleted (categories may be deleted only while unused). Inactive items can't receive new entries, but editing an existing entry that already points to one is allowed.

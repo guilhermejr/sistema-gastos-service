@@ -155,6 +155,20 @@ public class DashboardService {
     }
 
     /**
+     * Tudo de "a pagar" (D) ou "a receber" (R) que vence até {@code ate}, atrasados
+     * incluídos — para o aviso semanal, que não tem usuário logado. Quem chama precisa
+     * estar numa transação, por causa da geração das fixas.
+     */
+    public List<ItemAgendaResponse> agendaAte(UUID usuario, TipoLancamento tipo, LocalDate ate) {
+
+        recorrenciaService.gerarAte(usuario, ate);
+        return itensAgenda(usuario, tipo, Integer.MAX_VALUE, LocalDate.now(clock)).stream()
+                .filter(item -> !item.getData().isAfter(ate))
+                .toList();
+
+    }
+
+    /**
      * As ocorrências fixas só existem até onde foram geradas, então a lista só está
      * completa até essa data. Busca um item a mais, para saber se há outros; se ele cai
      * depois do que já foi gerado, gera até a data dele e busca de novo — o que surgir
