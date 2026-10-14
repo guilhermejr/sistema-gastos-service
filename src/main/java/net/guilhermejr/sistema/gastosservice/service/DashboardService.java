@@ -44,6 +44,7 @@ public class DashboardService {
     private final FaturaService faturaService;
     private final RelatorioService relatorioService;
     private final ConfiguracaoService configuracaoService;
+    private final PendenciaConciliacaoService pendenciaConciliacaoService;
     private final ContaMapper contaMapper;
     private final AuthenticationCurrentUserService authenticationCurrentUserService;
     private final Clock clock;
@@ -75,7 +76,11 @@ public class DashboardService {
         Map<Long, BigDecimal> pendentes = pendentesAte(usuario, contasSaldoGeral, ciclo.fim());
 
         List<FaturaResumidaResponse> faturas = cartaoRepository.findAllByUsuarioAndAtivoTrueOrderByOrdemAscNomeAsc(usuario)
-                .stream().map(faturaService::resumoAtual).toList();
+                .stream().map(cartao -> {
+                    FaturaResumidaResponse fatura = faturaService.resumoAtual(cartao);
+                    fatura.setConciliacao(pendenciaConciliacaoService.doCartao(cartao));
+                    return fatura;
+                }).toList();
 
         return DashboardResponse.builder()
                 .ano(ciclo.nome().getYear())
@@ -90,6 +95,7 @@ public class DashboardService {
                 .faturas(faturas.stream().map(FaturaResumidaResponse::getTotal).reduce(BigDecimal.ZERO, BigDecimal::add))
                 .contas(contasSaldoGeral.stream().map(c -> {
                     ContaResponse conta = contaMapper.mapObject(c, saldos.get(c.getId()));
+                    conta.setConciliacao(pendenciaConciliacaoService.daConta(c));
                     if (c.getMostraSaldoPrevisto()) {
                         conta.setSaldoPrevisto(conta.getSaldo().add(pendentes.getOrDefault(c.getId(), BigDecimal.ZERO)));
                     }

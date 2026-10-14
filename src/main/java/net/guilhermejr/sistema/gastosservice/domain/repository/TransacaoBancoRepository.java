@@ -46,6 +46,23 @@ public interface TransacaoBancoRepository extends JpaRepository<TransacaoBanco, 
 
     List<TransacaoBanco> findAllByCartaoAndFaturaBetweenOrderByDataDescIdDesc(Cartao cartao, LocalDate inicio, LocalDate fim);
 
+    /**
+     * Faturas das transações do cartão ainda a conciliar até {@code ate}, uma por transação.
+     * Mesma regra de ConciliacaoService.aRevisar: conciliada ou importada cujo lançamento
+     * foi apagado volta a contar.
+     */
+    @Query("SELECT t.fatura FROM TransacaoBanco t WHERE t.cartao = :cartao AND t.fatura <= :ate AND (t.situacao = "
+            + "net.guilhermejr.sistema.gastosservice.domain.enums.SituacaoTransacaoBanco.A_REVISAR OR (t.situacao <> "
+            + "net.guilhermejr.sistema.gastosservice.domain.enums.SituacaoTransacaoBanco.IGNORADA AND t.lancamento IS NULL))")
+    List<LocalDate> faturasAConciliar(@Param("cartao") Cartao cartao, @Param("ate") LocalDate ate);
+
+    /** Datas das transações da conta ainda a conciliar até {@code ate}; regra de ConciliacaoContaService.aRevisar. */
+    @Query("SELECT t.data FROM TransacaoBanco t WHERE t.conta = :conta AND t.data <= :ate AND (t.situacao = "
+            + "net.guilhermejr.sistema.gastosservice.domain.enums.SituacaoTransacaoBanco.A_REVISAR OR (t.situacao <> "
+            + "net.guilhermejr.sistema.gastosservice.domain.enums.SituacaoTransacaoBanco.IGNORADA "
+            + "AND t.lancamento IS NULL AND t.movimentacao IS NULL))")
+    List<LocalDate> datasAConciliar(@Param("conta") Conta conta, @Param("ate") LocalDate ate);
+
     /** Lançamentos do cartão já ligados a uma transação do banco, de qualquer fatura. */
     @Query("SELECT t.lancamento.id FROM TransacaoBanco t WHERE t.cartao = :cartao AND t.lancamento IS NOT NULL")
     Set<Long> lancamentosLigados(@Param("cartao") Cartao cartao);

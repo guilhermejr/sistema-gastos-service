@@ -6,6 +6,7 @@ import org.junit.jupiter.api.Test;
 
 import java.time.LocalDateTime;
 import java.time.OffsetDateTime;
+import java.util.Optional;
 
 public class BancoAgendamentoTest {
 
@@ -27,6 +28,17 @@ public class BancoAgendamentoTest {
 
         Assertions.assertFalse(BancoAgendamento.desatualizado(LocalDateTime.parse("2026-10-11T12:05:00"), PLUGGY));
         Assertions.assertFalse(BancoAgendamento.desatualizado(null, null));
+
+    }
+
+    @Test
+    @DisplayName("Avisa só quando a busca aumentou o que há para conciliar")
+    public void aviso_conciliar() {
+
+        Assertions.assertEquals(Optional.of("Itaú: 1 nova · 4 a conciliar"), BancoAgendamento.aviso("Itaú", 3, 4));
+        Assertions.assertEquals(Optional.of("Conta: 2 novas · 2 a conciliar"), BancoAgendamento.aviso("Conta", 0, 2));
+        Assertions.assertEquals(Optional.empty(), BancoAgendamento.aviso("Itaú", 3, 3));
+        Assertions.assertEquals(Optional.empty(), BancoAgendamento.aviso("Itaú", 3, 1));
 
     }
 

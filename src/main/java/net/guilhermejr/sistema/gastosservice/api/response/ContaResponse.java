@@ -33,5 +33,7 @@ public class ContaResponse {
     /** Última busca no banco, em UTC. */
     private LocalDateTime bancoSincronizado;
     private BigDecimal bancoSaldo;
+    /** Só no dashboard, em conta ligada ao banco com algo a conciliar; nulo nos outros casos. */
+    private PendenciaConciliacaoResponse conciliacao;
 
 }
