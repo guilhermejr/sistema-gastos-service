@@ -20,10 +20,11 @@ import java.util.stream.Collectors;
  *
  * <p>Ordem das tentativas:
  * <ol>
- *   <li>Aplicação e resgate da aplicação automática do Itaú ("APLIC AUT") → ignorar. O
- *   saldo do banco já soma a aplicação automática, então o vaivém entre ela e a conta não
- *   muda nada. O rendimento dela ("REND PAGO APLIC AUT") é dinheiro novo e segue o fluxo
- *   normal — sem par, vira sugestão de criar receita.</li>
+ *   <li>Aplicação, resgate e rendimento da aplicação automática do Itaú ("APLIC AUT") →
+ *   ignorar. O saldo do banco já soma a aplicação automática com o que ela rendeu até o dia,
+ *   então o vaivém entre ela e a conta não muda nada. O rendimento pago no resgate ("REND
+ *   PAGO APLIC AUT") também não: já estava no saldo e só passou da aplicação para a conta.
+ *   Rendimento entra no sistema à mão, pela diferença entre o saldo do banco e o do sistema.</li>
  *   <li>Mesmo tipo e mesmo valor ao centavo, com até {@link #DIAS_MESMO_VALOR} dias de
  *   diferença (um fixo do dia 10 pago no dia 8). Quando há tantas transações quanto itens
  *   do sistema com o mesmo valor, casam em ordem de data; senão, o usuário escolhe.</li>
@@ -137,10 +138,9 @@ public final class ConciliadorConta {
 
     }
 
-    /** Aplicação e resgate da aplicação automática ("APL APLIC AUT MAIS", "RES APLIC AUT MAIS"); o rendimento, não. */
+    /** Aplicação, resgate e rendimento da aplicação automática ("APL APLIC AUT MAIS", "RES APLIC AUT MAIS", "REND PAGO APLIC AUT"). */
     public static boolean automatica(TransacaoBanco transacao) {
-        String descricao = transacao.getDescricao().toUpperCase(Locale.ROOT);
-        return descricao.contains("APLIC AUT") && !descricao.contains("REND PAGO");
+        return transacao.getDescricao().toUpperCase(Locale.ROOT).contains("APLIC AUT");
     }
 
     private record Chave(TipoLancamento tipo, BigDecimal valor) {}

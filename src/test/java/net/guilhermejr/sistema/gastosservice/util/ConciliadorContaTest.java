@@ -78,14 +78,16 @@ public class ConciliadorContaTest {
     }
 
     @Test
-    @DisplayName("Rendimento da aplicação automática é dinheiro novo: sugere criar a receita")
-    public void rendimento_vira_receita() {
+    @DisplayName("Rendimento pago no resgate já estava no saldo do banco: é ignorado")
+    public void rendimento_ignorado() {
 
-        ConciliadorConta.Sugestao sugestao = unica(ConciliadorConta.sugerir(
-                List.of(banco("0.02", "2026-10-02", "Rendimentos REND PAGO APLIC AUT MAIS")), List.of()));
+        // Caso real de 15/10/2026: o Pix de 400,00 resgatou 399,97 + 0,03 de rendimento e o
+        // saldo do banco não mudou; importar os 0,03 deixou o sistema 0,03 acima
+        ConciliadorConta.Resultado resultado = ConciliadorConta.sugerir(List.of(
+                banco("399.97", "2026-10-15", "Entrada RES APLIC AUT MAIS AP"),
+                banco("0.03", "2026-10-15", "Entrada REND PAGO APLIC AUT APR")), List.of());
 
-        Assertions.assertEquals(SugestaoConciliacao.CRIAR, sugestao.tipo());
-        Assertions.assertEquals(TipoLancamento.R, sugestao.transacao().getTipo());
+        Assertions.assertTrue(resultado.sugestoes().stream().allMatch(s -> s.tipo() == SugestaoConciliacao.IGNORAR));
 
     }
 
