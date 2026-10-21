@@ -119,7 +119,7 @@ public class FaturaService {
 
     /**
      * Fatura do cartão para o dashboard, sem a lista de lançamentos: a que já fechou
-     * enquanto ainda tiver algo pendente, senão a atual.
+     * enquanto ainda tiver algo pendente, com a atual em {@code proxima}; senão a atual.
      */
     public FaturaResumidaResponse resumoAtual(Cartao cartao) {
 
@@ -127,7 +127,9 @@ public class FaturaService {
         YearMonth anterior = atual.minusMonths(1);
         List<Lancamento> lancamentosAnterior = lancamentos(cartao, anterior);
         if (liquido(lancamentosAnterior.stream().filter(l -> !l.getRealizado()).toList()).signum() > 0) {
-            return resumo(cartao, anterior, lancamentosAnterior);
+            FaturaResumidaResponse fechada = resumo(cartao, anterior, lancamentosAnterior);
+            fechada.setProxima(resumo(cartao, atual, lancamentos(cartao, atual)));
+            return fechada;
         }
         return resumo(cartao, atual, lancamentos(cartao, atual));
 

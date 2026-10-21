@@ -24,5 +24,7 @@ public class FaturaResumidaResponse {
     private BigDecimal pendente;
     /** Só no dashboard, em cartão ligado ao banco com algo a conciliar; nulo nos outros casos. */
     private PendenciaConciliacaoResponse conciliacao;
+    /** Só no dashboard, quando esta é uma fatura fechada ainda não paga: a atual, aberta. Fora do total de faturas. */
+    private FaturaResumidaResponse proxima;
 
 }
