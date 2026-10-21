@@ -117,11 +117,19 @@ public class FaturaService {
 
     }
 
-    /** Fatura atual do cartão, sem a lista de lançamentos. */
+    /**
+     * Fatura do cartão para o dashboard, sem a lista de lançamentos: a que já fechou
+     * enquanto ainda tiver algo pendente, senão a atual.
+     */
     public FaturaResumidaResponse resumoAtual(Cartao cartao) {
 
-        YearMonth mes = mesDaFaturaAtual(cartao);
-        return resumo(cartao, mes, lancamentos(cartao, mes));
+        YearMonth atual = mesDaFaturaAtual(cartao);
+        YearMonth anterior = atual.minusMonths(1);
+        List<Lancamento> lancamentosAnterior = lancamentos(cartao, anterior);
+        if (liquido(lancamentosAnterior.stream().filter(l -> !l.getRealizado()).toList()).signum() > 0) {
+            return resumo(cartao, anterior, lancamentosAnterior);
+        }
+        return resumo(cartao, atual, lancamentos(cartao, atual));
 
     }
 

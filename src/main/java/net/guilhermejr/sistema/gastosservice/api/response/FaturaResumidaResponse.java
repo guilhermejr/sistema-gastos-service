@@ -6,7 +6,7 @@ import net.guilhermejr.sistema.gastosservice.domain.enums.StatusFatura;
 import java.math.BigDecimal;
 import java.time.LocalDate;
 
-/** Um cartão com a fatura atual, para o dashboard. */
+/** Um cartão com a fatura do dashboard: a fechada ainda não paga, senão a atual. */
 @Getter
 @Setter
 @Builder
