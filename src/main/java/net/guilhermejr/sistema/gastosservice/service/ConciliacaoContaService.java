@@ -8,6 +8,7 @@ import net.guilhermejr.sistema.gastosservice.api.request.ConciliarContaRequest;
 import net.guilhermejr.sistema.gastosservice.api.request.ConfirmarConciliacaoContaRequest;
 import net.guilhermejr.sistema.gastosservice.api.request.CriarDoBancoRequest;
 import net.guilhermejr.sistema.gastosservice.api.request.LancamentoRequest;
+import net.guilhermejr.sistema.gastosservice.api.request.RendimentoContaRequest;
 import net.guilhermejr.sistema.gastosservice.api.response.ConciliacaoContaResponse;
 import net.guilhermejr.sistema.gastosservice.api.response.ItemContaResponse;
 import net.guilhermejr.sistema.gastosservice.api.response.LancamentoResponse;
@@ -22,6 +23,7 @@ import net.guilhermejr.sistema.gastosservice.domain.enums.Escopo;
 import net.guilhermejr.sistema.gastosservice.domain.enums.Repeticao;
 import net.guilhermejr.sistema.gastosservice.domain.enums.SituacaoTransacaoBanco;
 import net.guilhermejr.sistema.gastosservice.domain.enums.SugestaoConciliacao;
+import net.guilhermejr.sistema.gastosservice.domain.enums.TipoLancamento;
 import net.guilhermejr.sistema.gastosservice.domain.repository.LancamentoRepository;
 import net.guilhermejr.sistema.gastosservice.domain.repository.MovimentacaoRepository;
 import net.guilhermejr.sistema.gastosservice.domain.repository.TransacaoBancoRepository;
@@ -135,6 +137,39 @@ public class ConciliacaoContaService {
 
     }
 
+    /**
+     * Lança a diferença entre o saldo do banco e o do sistema como uma receita realizada
+     * hoje — o rendimento da aplicação automática, que o saldo do banco já conta e o
+     * extrato não traz. Só quando a conciliação deixa (ver {@code rendimento} na resposta).
+     */
+    @Transactional
+    public ConciliacaoContaResponse lancarRendimento(Long contaId, RendimentoContaRequest rendimentoContaRequest) {
+
+        Conta conta = contaLigada(contaId);
+        LocalDate hoje = LocalDate.now(clock);
+        ConciliacaoContaResponse atual = conciliacao(conta, YearMonth.from(hoje));
+        if (atual.getRendimento() == null) {
+            throw new ExceptionDefault("Só dá para lançar o rendimento com tudo conciliado e o saldo do banco acima do sistema.");
+        }
+        LancamentoRequest lancamentoRequest = LancamentoRequest.builder()
+                .tipo(TipoLancamento.R)
+                .descricao("Rendimento")
+                .valor(moeda(atual.getRendimento()))
+                .data(hoje.format(DATA_BRASIL))
+                .categoriaId(rendimentoContaRequest.getCategoriaId())
+                .contaId(conta.getId())
+                .realizado(true)
+                .repeticao(Repeticao.UNICA)
+                .build();
+        List<LancamentoResponse> criados = lancamentoService.inserir(lancamentoRequest);
+        Lancamento rendimento = lancamentoService.lancamentoDoUsuario(criados.get(0).getId());
+        rendimento.setAjusteBanco(true);
+        lancamentoRepository.save(rendimento);
+        log.info("Conta {}: rendimento de {} lançado para igualar ao saldo do banco", contaId, atual.getRendimento());
+        return conciliacao(conta, YearMonth.from(hoje));
+
+    }
+
     @Transactional
     public ConciliacaoContaResponse ignorar(Long contaId, Long transacaoId) {
 
@@ -181,7 +216,7 @@ public class ConciliacaoContaService {
         LocalDate ate = fim.plusDays(MARGEM_DIAS);
         List<ConciliadorConta.Item> itens = Stream.concat(
                 lancamentoRepository.findAllByContaAndDataBetweenOrderByDataAscIdAsc(conta, de, ate).stream()
-                        .filter(l -> !lancamentosLigados.contains(l.getId()))
+                        .filter(l -> !lancamentosLigados.contains(l.getId()) && !Boolean.TRUE.equals(l.getAjusteBanco()))
                         .filter(l -> !(Boolean.TRUE.equals(l.getRealizado()) && l.getData().isBefore(conta.getBancoInicio())))
                         .map(ConciliadorConta.Item::de),
                 movimentacaoRepository.findDaContaNoPeriodo(conta.getUsuario(), conta, de, ate).stream()
@@ -204,8 +239,32 @@ public class ConciliacaoContaService {
                 .filter(i -> !i.data().isBefore(inicio) && !i.data().isAfter(limite))
                 .map(ConciliacaoContaService::item).toList();
 
-        return new ConciliacaoContaResponse(linhas, semPar, conta.getBancoSaldo(), saldoService.saldo(conta),
-                conta.getBancoSincronizado(), conta.getBancoInicio());
+        BigDecimal saldoSistema = saldoService.saldo(conta);
+        BigDecimal rendimento = rendimento(conta, mes, saldoSistema, semPar);
+        Long categoriaRendimentoId = rendimento == null ? null : lancamentoRepository.findFirstByContaAndAjusteBancoTrueOrderByDataDescIdDesc(conta)
+                .map(Lancamento::getCategoria).filter(Categoria::getAtivo).map(Categoria::getId).orElse(null);
+
+        return new ConciliacaoContaResponse(linhas, semPar, conta.getBancoSaldo(), saldoSistema,
+                conta.getBancoSincronizado(), conta.getBancoInicio(), rendimento, categoriaRendimentoId);
+
+    }
+
+    /**
+     * O que falta no sistema para chegar ao saldo do banco, se só pode ser rendimento: no mês
+     * atual, sem transação a conciliar até hoje (em mês nenhum) e sem nada só no sistema.
+     * Com algo por revisar, a diferença pode ser outra coisa. Senão, null.
+     */
+    private BigDecimal rendimento(Conta conta, YearMonth mes, BigDecimal saldoSistema, List<ItemContaResponse> semPar) {
+
+        LocalDate hoje = LocalDate.now(clock);
+        if (!mes.equals(YearMonth.from(hoje)) || conta.getBancoSaldo() == null || saldoSistema == null || !semPar.isEmpty()) {
+            return null;
+        }
+        BigDecimal diferenca = conta.getBancoSaldo().subtract(saldoSistema);
+        if (diferenca.signum() <= 0 || !transacaoBancoRepository.datasAConciliar(conta, hoje).isEmpty()) {
+            return null;
+        }
+        return diferenca;
 
     }
 

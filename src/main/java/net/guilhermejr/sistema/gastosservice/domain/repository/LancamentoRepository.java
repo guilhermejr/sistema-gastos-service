@@ -24,6 +24,8 @@ public interface LancamentoRepository extends JpaRepository<Lancamento, Long> {
     /** Busca por id restringindo ao dono: id de outro usuário não é encontrado. */
     Optional<Lancamento> findByIdAndUsuario(Long id, UUID usuario);
 
+    Optional<Lancamento> findFirstByContaAndAjusteBancoTrueOrderByDataDescIdDesc(Conta conta);
+
     List<Lancamento> findAllByUsuarioAndDataBetweenOrderByDataAscIdAsc(UUID usuario, LocalDate inicio, LocalDate fim);
 
     /**

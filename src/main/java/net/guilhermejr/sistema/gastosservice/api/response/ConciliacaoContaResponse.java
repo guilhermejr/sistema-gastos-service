@@ -25,5 +25,12 @@ public class ConciliacaoContaResponse {
     private LocalDateTime sincronizado;
     /** Primeiro dia buscado no banco. */
     private LocalDate inicio;
+    /**
+     * Quanto o banco está acima do sistema, quando dá para lançar como rendimento: mês
+     * atual, nada a conciliar até hoje e nada só no sistema. Senão, null.
+     */
+    private BigDecimal rendimento;
+    /** Categoria do último rendimento lançado assim, para sugerir. */
+    private Long categoriaRendimentoId;
 
 }

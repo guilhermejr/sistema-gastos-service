@@ -81,4 +81,12 @@ public class Lancamento extends Auditoria implements Serializable {
     @ManyToOne
     private Movimentacao pagamento;
 
+    /**
+     * Receita lançada pela conciliação da conta para igualar o saldo ao do banco (o
+     * rendimento da aplicação automática). Não tem transação no extrato, então fica fora
+     * dos candidatos da conciliação.
+     */
+    @Column(nullable = false)
+    private Boolean ajusteBanco = false;
+
 }

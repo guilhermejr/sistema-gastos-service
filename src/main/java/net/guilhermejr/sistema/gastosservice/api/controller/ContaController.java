@@ -8,6 +8,7 @@ import net.guilhermejr.sistema.gastosservice.api.request.ConfirmarConciliacaoCon
 import net.guilhermejr.sistema.gastosservice.api.request.ContaBancoRequest;
 import net.guilhermejr.sistema.gastosservice.api.request.ContaRequest;
 import net.guilhermejr.sistema.gastosservice.api.request.CriarDoBancoRequest;
+import net.guilhermejr.sistema.gastosservice.api.request.RendimentoContaRequest;
 import net.guilhermejr.sistema.gastosservice.api.response.ConciliacaoContaResponse;
 import net.guilhermejr.sistema.gastosservice.api.response.ContaResponse;
 import net.guilhermejr.sistema.gastosservice.api.response.MovimentacaoResponse;
@@ -137,6 +138,14 @@ public class ContaController {
 
         log.info("Confirmando conciliação do mês {}/{} da conta: {}", mes, ano, id);
         return ResponseEntity.status(HttpStatus.OK).body(conciliacaoContaService.confirmar(id, ano, mes, confirmarConciliacaoContaRequest));
+
+    }
+
+    @PostMapping("/{id}/banco/rendimento")
+    public ResponseEntity<ConciliacaoContaResponse> lancarRendimento(@PathVariable Long id, @Valid @RequestBody RendimentoContaRequest rendimentoContaRequest) {
+
+        log.info("Lançando como rendimento a diferença com o saldo do banco da conta: {}", id);
+        return ResponseEntity.status(HttpStatus.OK).body(conciliacaoContaService.lancarRendimento(id, rendimentoContaRequest));
 
     }
 

@@ -6,6 +6,8 @@ import net.guilhermejr.sistema.gastosservice.api.request.ConciliarContaRequest;
 import net.guilhermejr.sistema.gastosservice.api.request.ConfirmarConciliacaoContaRequest;
 import net.guilhermejr.sistema.gastosservice.api.request.CriarDoBancoRequest;
 import net.guilhermejr.sistema.gastosservice.api.request.LancamentoRequest;
+import net.guilhermejr.sistema.gastosservice.api.request.RendimentoContaRequest;
+import net.guilhermejr.sistema.gastosservice.api.response.ConciliacaoContaResponse;
 import net.guilhermejr.sistema.gastosservice.api.response.LancamentoResponse;
 import net.guilhermejr.sistema.gastosservice.client.PluggyClient;
 import net.guilhermejr.sistema.gastosservice.domain.entity.Conta;
@@ -45,11 +47,13 @@ public class ConciliacaoContaServiceTest {
     private ConciliacaoContaService service;
     private Conta conta;
     private TransacaoBanco transacao;
+    private SaldoService saldoService;
 
     @BeforeEach
     public void preparar() {
 
         PluggyClient pluggyClient = Mockito.mock(PluggyClient.class);
+        saldoService = Mockito.mock(SaldoService.class);
         Mockito.when(pluggyClient.liberadoPara(Mockito.any())).thenReturn(true);
         ContaService contaService = Mockito.mock(ContaService.class);
         lancamentoService = Mockito.mock(LancamentoService.class);
@@ -59,7 +63,7 @@ public class ConciliacaoContaServiceTest {
         ConverteStringUtil converteStringUtil = Mockito.mock(ConverteStringUtil.class);
         Mockito.when(converteStringUtil.toYearMonth(2026, 10)).thenReturn(YearMonth.of(2026, 10));
         Clock clock = Clock.fixed(LocalDate.of(2026, 10, 30).atStartOfDay(ZoneId.of("America/Bahia")).toInstant(), ZoneId.of("America/Bahia"));
-        service = new ConciliacaoContaService(pluggyClient, contaService, Mockito.mock(SaldoService.class), Mockito.mock(RecorrenciaService.class),
+        service = new ConciliacaoContaService(pluggyClient, contaService, saldoService, Mockito.mock(RecorrenciaService.class),
                 lancamentoService, lancamentoRepository, movimentacaoRepository, transacaoBancoRepository, Mockito.mock(TransacaoBancoMapper.class),
                 converteStringUtil, Mockito.mock(AuthenticationCurrentUserService.class, Answers.RETURNS_DEEP_STUBS), clock);
 
@@ -187,6 +191,58 @@ public class ConciliacaoContaServiceTest {
         Mockito.verify(lancamentoService).inserir(requisicao.capture());
         Assertions.assertFalse(requisicao.getValue().getRealizado());
         Assertions.assertEquals(SituacaoTransacaoBanco.IMPORTADA, transacao.getSituacao());
+
+    }
+
+    @Test
+    @DisplayName("Tudo conciliado e o banco acima: a diferença pode virar rendimento, lançado hoje e fora da conciliação")
+    public void lancar_rendimento() {
+
+        conta.setBancoSaldo(new BigDecimal("829.25"));
+        Mockito.when(saldoService.saldo(conta)).thenReturn(new BigDecimal("829.18"));
+        LancamentoResponse criado = new LancamentoResponse();
+        criado.setId(50L);
+        Mockito.when(lancamentoService.inserir(Mockito.any())).thenReturn(List.of(criado));
+        Lancamento rendimento = new Lancamento();
+        Mockito.when(lancamentoService.lancamentoDoUsuario(50L)).thenReturn(rendimento);
+
+        service.lancarRendimento(2L, RendimentoContaRequest.builder().categoriaId(91L).build());
+
+        ArgumentCaptor<LancamentoRequest> requisicao = ArgumentCaptor.forClass(LancamentoRequest.class);
+        Mockito.verify(lancamentoService).inserir(requisicao.capture());
+        Assertions.assertEquals(TipoLancamento.R, requisicao.getValue().getTipo());
+        Assertions.assertEquals("0,07", requisicao.getValue().getValor());
+        Assertions.assertEquals("30/10/2026", requisicao.getValue().getData());
+        Assertions.assertTrue(requisicao.getValue().getRealizado());
+        Assertions.assertTrue(rendimento.getAjusteBanco());
+        Mockito.verify(lancamentoRepository).save(rendimento);
+
+    }
+
+    @Test
+    @DisplayName("Com transação do banco a conciliar até hoje, a diferença não é oferecida como rendimento")
+    public void rendimento_com_pendencia() {
+
+        conta.setBancoSaldo(new BigDecimal("829.25"));
+        Mockito.when(saldoService.saldo(conta)).thenReturn(new BigDecimal("829.18"));
+        Mockito.when(transacaoBancoRepository.datasAConciliar(Mockito.eq(conta), Mockito.any())).thenReturn(List.of(LocalDate.of(2026, 10, 28)));
+
+        ConciliacaoContaResponse resposta = service.conciliacao(2L, 2026, 10);
+        Assertions.assertNull(resposta.getRendimento());
+        RendimentoContaRequest request = RendimentoContaRequest.builder().categoriaId(91L).build();
+        Assertions.assertThrows(ExceptionDefault.class, () -> service.lancarRendimento(2L, request));
+        Mockito.verify(lancamentoService, Mockito.never()).inserir(Mockito.any());
+
+    }
+
+    @Test
+    @DisplayName("Banco abaixo do sistema não é rendimento")
+    public void rendimento_banco_abaixo() {
+
+        conta.setBancoSaldo(new BigDecimal("829.00"));
+        Mockito.when(saldoService.saldo(conta)).thenReturn(new BigDecimal("829.18"));
+
+        Assertions.assertNull(service.conciliacao(2L, 2026, 10).getRendimento());
 
     }
 
