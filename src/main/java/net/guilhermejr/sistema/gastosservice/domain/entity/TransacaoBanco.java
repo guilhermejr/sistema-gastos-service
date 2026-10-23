@@ -93,4 +93,12 @@ public class TransacaoBanco extends Auditoria implements Serializable {
     @ManyToOne
     private Movimentacao movimentacao;
 
+    /**
+     * Se o dinheiro já saiu (ou entrou): o banco não a dá mais como pendente e a data já
+     * chegou. Na conta, um pagamento agendado vem pendente e com a data em que será feito.
+     */
+    public boolean aconteceu(LocalDate hoje) {
+        return !Boolean.TRUE.equals(pendente) && !data.isAfter(hoje);
+    }
+
 }

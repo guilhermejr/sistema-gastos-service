@@ -13,7 +13,9 @@ import net.guilhermejr.sistema.gastosservice.domain.entity.Conta;
 import net.guilhermejr.sistema.gastosservice.domain.entity.TransacaoBanco;
 import net.guilhermejr.sistema.gastosservice.domain.enums.SituacaoTransacaoBanco;
 import net.guilhermejr.sistema.gastosservice.domain.enums.TipoLancamento;
+import net.guilhermejr.sistema.gastosservice.domain.entity.Lancamento;
 import net.guilhermejr.sistema.gastosservice.domain.repository.ContaRepository;
+import net.guilhermejr.sistema.gastosservice.domain.repository.LancamentoRepository;
 import net.guilhermejr.sistema.gastosservice.domain.repository.TransacaoBancoRepository;
 import net.guilhermejr.sistema.gastosservice.exception.ExceptionDefault;
 import org.springframework.stereotype.Service;
@@ -42,6 +44,7 @@ public class ContaBancoService {
     private final PluggyClient pluggyClient;
     private final ContaRepository contaRepository;
     private final TransacaoBancoRepository transacaoBancoRepository;
+    private final LancamentoRepository lancamentoRepository;
     private final ContaService contaService;
     private final SaldoService saldoService;
     private final ContaMapper contaMapper;
@@ -117,8 +120,11 @@ public class ContaBancoService {
 
     /**
      * Busca as transações da conta no banco e guarda as de {@code bancoInicio} em diante.
-     * A já guardada é atualizada; a pendente que o banco deixou de informar, e que ninguém
-     * revisou, é apagada. Situação e revisão nunca são tocadas aqui.
+     * A já guardada é atualizada; a que o banco deixou de informar é apagada se ninguém a
+     * revisou ou se ainda era pendente — um agendamento que, efetivado, pode voltar com
+     * outro id e precisa achar de novo o lançamento a que estava ligado. Lançamento ligado
+     * a uma transação que já aconteceu fica realizado na data do banco: conciliar uma
+     * pendente só liga, e é aqui que ela vira pagamento.
      */
     @Transactional
     public SincronizacaoContaResponse sincronizar(Conta conta) {
@@ -159,9 +165,17 @@ public class ContaBancoService {
         transacaoBancoRepository.saveAll(salvar);
 
         List<TransacaoBanco> sumiram = guardadas.values().stream()
-                .filter(t -> !vistas.contains(t.getBancoId()) && t.getSituacao() == SituacaoTransacaoBanco.A_REVISAR)
+                .filter(t -> !vistas.contains(t.getBancoId())
+                        && (t.getSituacao() == SituacaoTransacaoBanco.A_REVISAR || Boolean.TRUE.equals(t.getPendente())))
                 .toList();
         transacaoBancoRepository.deleteAll(sumiram);
+
+        LocalDate hoje = LocalDate.now(clock);
+        guardadas.values().stream()
+                .filter(t -> vistas.contains(t.getBancoId()) && t.getLancamento() != null && t.aconteceu(hoje))
+                .map(t -> realizar(t.getLancamento(), t.getData()))
+                .flatMap(Optional::stream)
+                .forEach(lancamentoRepository::save);
         pluggyClient.contas(chave).stream()
                 .filter(c -> c.id().equals(conta.getBancoContaId()))
                 .findFirst()
@@ -173,6 +187,19 @@ public class ContaBancoService {
                 conta.getId(), vistas.size(), novas, atualizadas, sumiram.size());
         return new SincronizacaoContaResponse(novas, atualizadas, sumiram.size(), vistas.size(),
                 conta.getBancoSincronizado(), conta.getBancoSaldo());
+
+    }
+
+    /** O lançamento ainda não realizado, realizado na data do banco; vazio se já estava. */
+    private static Optional<Lancamento> realizar(Lancamento lancamento, LocalDate data) {
+
+        if (Boolean.TRUE.equals(lancamento.getRealizado())) {
+            return Optional.empty();
+        }
+        lancamento.setRealizado(true);
+        lancamento.setData(data);
+        log.info("Lançamento {} realizado: o banco efetivou a transação em {}", lancamento.getId(), data);
+        return Optional.of(lancamento);
 
     }
 

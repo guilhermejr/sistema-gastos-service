@@ -43,8 +43,10 @@ import java.util.stream.Stream;
 
 /**
  * Conciliação de um mês da conta corrente com o extrato do banco. Conciliar com um
- * lançamento o dá como realizado na data do banco; com uma movimentação, só liga (ela já
- * conta no saldo). As sugestões são calculadas a cada consulta, nada é gravado aqui.
+ * lançamento o dá como realizado na data do banco, se a transação já aconteceu; se ainda
+ * está pendente (um pagamento agendado), só liga, e a sincronização o realiza quando o
+ * banco efetivar. Com uma movimentação, só liga (ela já conta no saldo). As sugestões são
+ * calculadas a cada consulta, nada é gravado aqui.
  */
 @Log4j2
 @RequiredArgsConstructor
@@ -108,7 +110,7 @@ public class ConciliacaoContaService {
 
     }
 
-    /** Cria um lançamento avulso, já realizado, com a data e o valor do banco. */
+    /** Cria um lançamento avulso com a data e o valor do banco; realizado se a transação já aconteceu. */
     @Transactional
     public ConciliacaoContaResponse criar(Long contaId, Long transacaoId, CriarDoBancoRequest criarDoBancoRequest) {
 
@@ -121,7 +123,7 @@ public class ConciliacaoContaService {
                 .data(transacao.getData().format(DATA_BRASIL))
                 .categoriaId(criarDoBancoRequest.getCategoriaId())
                 .contaId(conta.getId())
-                .realizado(true)
+                .realizado(transacao.aconteceu(LocalDate.now(clock)))
                 .repeticao(Repeticao.UNICA)
                 .build();
         List<LancamentoResponse> criados = lancamentoService.inserir(lancamentoRequest);
@@ -218,17 +220,21 @@ public class ConciliacaoContaService {
             transacao.setLancamento(null);
         } else {
             Lancamento lancamento = lancamentoLivre(conta, transacao, lancamentoId);
+            boolean aconteceu = transacao.aconteceu(LocalDate.now(clock));
             if (corrigirValor && lancamento.getValor().compareTo(transacao.getValor()) != 0) {
                 if (lancamento.getParcelamento() != null) {
                     throw new ExceptionDefault("O valor de uma parcela não é corrigido por aqui. Edite a compra parcelada.");
                 }
-                lancamentoService.atualizar(lancamento.getId(), requisicao(lancamento, conta, transacao), Escopo.UNICO);
+                lancamentoService.atualizar(lancamento.getId(), requisicao(lancamento, conta, transacao, aconteceu), Escopo.UNICO);
                 log.info("Lançamento {} corrigido para o valor do banco: {}", lancamento.getId(), transacao.getValor());
             }
-            // O dinheiro saiu (ou entrou) no dia em que o banco diz.
-            lancamento.setRealizado(true);
-            lancamento.setData(transacao.getData());
-            lancamentoRepository.save(lancamento);
+            // O dinheiro saiu (ou entrou) no dia em que o banco diz. Pendente, só liga:
+            // ContaBancoService.sincronizar realiza quando o banco efetivar.
+            if (aconteceu) {
+                lancamento.setRealizado(true);
+                lancamento.setData(transacao.getData());
+                lancamentoRepository.save(lancamento);
+            }
             transacao.setLancamento(lancamento);
             transacao.setMovimentacao(null);
         }
@@ -355,17 +361,20 @@ public class ConciliacaoContaService {
         };
     }
 
-    /** O mesmo lançamento, com o valor, a data e a realização do banco — para LancamentoService.atualizar. */
-    private static LancamentoRequest requisicao(Lancamento lancamento, Conta conta, TransacaoBanco transacao) {
+    /**
+     * O mesmo lançamento com o valor do banco — para LancamentoService.atualizar. A data e a
+     * realização do banco só se a transação já aconteceu; senão ficam as do lançamento.
+     */
+    private static LancamentoRequest requisicao(Lancamento lancamento, Conta conta, TransacaoBanco transacao, boolean aconteceu) {
 
         return LancamentoRequest.builder()
                 .tipo(lancamento.getTipo())
                 .descricao(lancamento.getDescricao())
                 .valor(moeda(transacao.getValor()))
-                .data(transacao.getData().format(DATA_BRASIL))
+                .data((aconteceu ? transacao.getData() : lancamento.getData()).format(DATA_BRASIL))
                 .categoriaId(lancamento.getCategoria().getId())
                 .contaId(conta.getId())
-                .realizado(true)
+                .realizado(aconteceu || Boolean.TRUE.equals(lancamento.getRealizado()))
                 .build();
 
     }
