@@ -35,13 +35,17 @@ public class PendenciaConciliacaoService {
 
     }
 
-    /** Até hoje; nulo se a conta não está ligada ou não há nada a conciliar. */
+    /**
+     * Até o fim do mês atual, o mesmo que a conciliação da conta abre: inclui o que o banco
+     * já agendou (salário, débitos), como o cartão inclui a fatura atual. Nulo se a conta não
+     * está ligada ou não há nada a conciliar.
+     */
     public PendenciaConciliacaoResponse daConta(Conta conta) {
 
         if (conta.getBancoContaId() == null) {
             return null;
         }
-        return pendencia(transacaoBancoRepository.datasAConciliar(conta, LocalDate.now(clock)));
+        return pendencia(transacaoBancoRepository.datasAConciliar(conta, YearMonth.now(clock).atEndOfMonth()));
 
     }
 
