@@ -11,6 +11,7 @@ import net.guilhermejr.sistema.gastosservice.api.response.TotaisResponse;
 import net.guilhermejr.sistema.gastosservice.api.response.ValorCategoriaResponse;
 import net.guilhermejr.sistema.gastosservice.domain.entity.Cartao;
 import net.guilhermejr.sistema.gastosservice.domain.entity.Categoria;
+import net.guilhermejr.sistema.gastosservice.domain.entity.Conta;
 import net.guilhermejr.sistema.gastosservice.domain.entity.Lancamento;
 import net.guilhermejr.sistema.gastosservice.domain.enums.TipoLancamento;
 import net.guilhermejr.sistema.gastosservice.domain.enums.TipoMovimentacao;
@@ -29,6 +30,7 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
+import java.util.function.Predicate;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
@@ -153,24 +155,35 @@ public class RelatorioService {
     }
 
     /**
-     * Calcula o ciclo. Usado também pelos cards de Receitas e Despesas do dashboard, para
-     * que eles e o relatório nunca discordem. Quem chama gera antes as ocorrências fixas
+     * Calcula o ciclo com todas as contas. Quem chama gera antes as ocorrências fixas
      * até {@link #ateOndeGerar}.
+     */
+    public Calculo calcular(UUID usuario, Ciclo ciclo) {
+        return calcular(usuario, ciclo, conta -> true);
+    }
+
+    /**
+     * Calcula o ciclo só com as contas que {@code entra} aceita: os lançamentos nelas e as
+     * faturas dos cartões que elas pagam (cartão sem conta de pagamento entra sempre). Os
+     * cards de Receitas e Despesas do dashboard usam a mesma regra do relatório, mas só
+     * com as contas que entram no Saldo. Quem chama gera antes as ocorrências fixas até
+     * {@link #ateOndeGerar}.
      *
      * <p>A fatura de cada cartão é a do mês em que o vencimento atual dele cai dentro do
      * ciclo ({@link Ciclo#mesDaFatura}), buscada pelo mês inteiro como em todo o resto —
      * compras já pagas guardam o vencimento antigo se o dia do cartão mudou.
      */
-    public Calculo calcular(UUID usuario, Ciclo ciclo) {
+    public Calculo calcular(UUID usuario, Ciclo ciclo, Predicate<Conta> entra) {
 
         List<Lancamento> emConta = lancamentoRepository
                 .findAllByUsuarioAndDataBetweenOrderByDataAscIdAsc(usuario, ciclo.inicio(), ciclo.fim())
-                .stream().filter(l -> l.getConta() != null).toList();
+                .stream().filter(l -> l.getConta() != null && entra.test(l.getConta())).toList();
 
         YearMonth primeiro = ciclo.mesInicio();
         Map<Cartao, List<Lancamento>> porCartao = lancamentoRepository
                 .findAllByUsuarioAndCartaoIsNotNullAndFaturaBetween(usuario, primeiro.atDay(1), primeiro.plusMonths(1).atEndOfMonth())
                 .stream()
+                .filter(l -> l.getCartao().getConta() == null || entra.test(l.getCartao().getConta()))
                 .filter(l -> YearMonth.from(l.getFatura()).equals(ciclo.mesDaFatura(l.getCartao().getDiaVencimento())))
                 .collect(Collectors.groupingBy(Lancamento::getCartao));
         List<FaturaResumidaResponse> faturas = porCartao.entrySet().stream()

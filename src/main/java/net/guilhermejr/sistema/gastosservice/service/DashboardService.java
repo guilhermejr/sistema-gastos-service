@@ -65,8 +65,9 @@ public class DashboardService {
         LocalDate geradoAte = YearMonth.from(hoje).plusMonths(1).atEndOfMonth();
         recorrenciaService.gerarAte(usuario, geradoAte);
 
-        // Mesma regra do relatório: cartão entra pelo total da fatura que vence no ciclo.
-        RelatorioService.Calculo doMes = relatorioService.calcular(usuario, ciclo);
+        // Mesma regra do relatório (cartão entra pelo total da fatura que vence no ciclo),
+        // mas só com as contas que entram no Saldo, como o card de Contas.
+        RelatorioService.Calculo doMes = relatorioService.calcular(usuario, ciclo, Conta::getSomaSaldoGeral);
 
         List<Conta> contas = contaRepository.findAllByUsuarioAndAtivoTrueOrderByOrdemAscNomeAsc(usuario);
         Map<Long, BigDecimal> saldos = saldoService.saldos(usuario, contas);
