@@ -14,6 +14,7 @@ import net.guilhermejr.sistema.gastosservice.domain.entity.TransacaoBanco;
 import net.guilhermejr.sistema.gastosservice.domain.enums.SituacaoTransacaoBanco;
 import net.guilhermejr.sistema.gastosservice.domain.enums.TipoLancamento;
 import net.guilhermejr.sistema.gastosservice.domain.entity.Lancamento;
+import net.guilhermejr.sistema.gastosservice.domain.entity.Movimentacao;
 import net.guilhermejr.sistema.gastosservice.domain.repository.ContaRepository;
 import net.guilhermejr.sistema.gastosservice.domain.repository.LancamentoRepository;
 import net.guilhermejr.sistema.gastosservice.domain.repository.TransacaoBancoRepository;
@@ -26,9 +27,11 @@ import java.time.Clock;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.ZoneOffset;
+import java.time.temporal.ChronoUnit;
 import java.util.*;
 import java.util.function.Function;
 import java.util.stream.Collectors;
+import java.util.stream.Stream;
 
 /**
  * Transações da conta corrente buscadas no banco (Itaú, pelo Meu Pluggy), guardadas para
@@ -40,6 +43,9 @@ import java.util.stream.Collectors;
 @RequiredArgsConstructor
 @Service
 public class ContaBancoService {
+
+    /** Quantos dias o banco pode mover a data de um agendamento ao efetivá-lo. */
+    private static final int DIAS_EFETIVACAO = 5;
 
     private final PluggyClient pluggyClient;
     private final ContaRepository contaRepository;
@@ -122,9 +128,10 @@ public class ContaBancoService {
      * Busca as transações da conta no banco e guarda as de {@code bancoInicio} em diante.
      * A já guardada é atualizada; a que o banco deixou de informar é apagada se ninguém a
      * revisou ou se ainda era pendente — um agendamento que, efetivado, pode voltar com
-     * outro id e precisa achar de novo o lançamento a que estava ligado. Lançamento ligado
-     * a uma transação que já aconteceu fica realizado na data do banco: conciliar uma
-     * pendente só liga, e é aqui que ela vira pagamento.
+     * outro id e precisa achar de novo o lançamento a que estava ligado. Se o banco ainda
+     * lista a pendente junto da efetivada, a efetivada herda a ligação ({@link #herdarLigacoes}).
+     * Lançamento ligado a uma transação que já aconteceu fica realizado na data do banco:
+     * conciliar uma pendente só liga, e é aqui que ela vira pagamento.
      */
     @Transactional
     public SincronizacaoContaResponse sincronizar(Conta conta) {
@@ -163,6 +170,7 @@ public class ContaBancoService {
             }
         }
         transacaoBancoRepository.saveAll(salvar);
+        List<TransacaoBanco> efetivadas = herdarLigacoes(guardadas, salvar, vistas);
 
         List<TransacaoBanco> sumiram = guardadas.values().stream()
                 .filter(t -> !vistas.contains(t.getBancoId())
@@ -171,7 +179,7 @@ public class ContaBancoService {
         transacaoBancoRepository.deleteAll(sumiram);
 
         LocalDate hoje = LocalDate.now(clock);
-        guardadas.values().stream()
+        Stream.concat(guardadas.values().stream(), efetivadas.stream().filter(t -> guardadas.get(t.getBancoId()) != t))
                 .filter(t -> vistas.contains(t.getBancoId()) && t.getLancamento() != null && t.aconteceu(hoje))
                 .map(t -> realizar(t.getLancamento(), t.getData()))
                 .flatMap(Optional::stream)
@@ -188,6 +196,68 @@ public class ContaBancoService {
         return new SincronizacaoContaResponse(novas, atualizadas, sumiram.size(), vistas.size(),
                 conta.getBancoSincronizado(), conta.getBancoSaldo());
 
+    }
+
+    /**
+     * Um agendamento efetivado pode voltar com outro id enquanto o banco ainda lista a
+     * pendente. A efetivada que o banco informou agora, ainda a revisar, herda a ligação da
+     * pendente com o mesmo tipo e valor e até {@link #DIAS_EFETIVACAO} dias de diferença (a
+     * mais próxima); a pendente fica desligada e ignorada, e é apagada quando o banco deixar
+     * de informá-la. Devolve as que herdaram.
+     */
+    private List<TransacaoBanco> herdarLigacoes(Map<String, TransacaoBanco> guardadas, List<TransacaoBanco> salvas, Set<String> vistas) {
+
+        List<TransacaoBanco> pendentes = guardadas.values().stream()
+                .filter(t -> Boolean.TRUE.equals(t.getPendente()) && (t.getLancamento() != null || t.getMovimentacao() != null))
+                .collect(Collectors.toCollection(ArrayList::new));
+        List<TransacaoBanco> efetivadas = Stream.concat(guardadas.values().stream(), salvas.stream().filter(t -> guardadas.get(t.getBancoId()) != t))
+                .filter(t -> vistas.contains(t.getBancoId()) && !Boolean.TRUE.equals(t.getPendente()) && t.getSituacao() == SituacaoTransacaoBanco.A_REVISAR
+                        && t.getLancamento() == null && t.getMovimentacao() == null)
+                .sorted(Comparator.comparing(TransacaoBanco::getData))
+                .toList();
+
+        // Por identidade: a transação nova ainda pode estar sem id.
+        Map<TransacaoBanco, TransacaoBanco> herancas = new IdentityHashMap<>();
+        for (TransacaoBanco efetivada : efetivadas) {
+            pendentes.stream()
+                    .filter(p -> p.getTipo() == efetivada.getTipo() && p.getValor().compareTo(efetivada.getValor()) == 0
+                            && dias(p, efetivada) <= DIAS_EFETIVACAO)
+                    .min(Comparator.comparingLong(p -> dias(p, efetivada)))
+                    .ifPresent(pendente -> {
+                        pendentes.remove(pendente);
+                        herancas.put(efetivada, pendente);
+                    });
+        }
+        if (herancas.isEmpty()) {
+            return List.of();
+        }
+
+        // Desliga e grava as pendentes antes de ligar as efetivadas: lançamento e movimentação
+        // são únicos em transacoes_banco, e o flush levaria as duas mudanças juntas.
+        Map<TransacaoBanco, Lancamento> lancamentos = new IdentityHashMap<>();
+        Map<TransacaoBanco, Movimentacao> movimentacoes = new IdentityHashMap<>();
+        herancas.forEach((efetivada, pendente) -> {
+            lancamentos.put(efetivada, pendente.getLancamento());
+            movimentacoes.put(efetivada, pendente.getMovimentacao());
+            pendente.setLancamento(null);
+            pendente.setMovimentacao(null);
+            pendente.setSituacao(SituacaoTransacaoBanco.IGNORADA);
+        });
+        transacaoBancoRepository.saveAllAndFlush(List.copyOf(herancas.values()));
+        herancas.forEach((efetivada, pendente) -> {
+            efetivada.setLancamento(lancamentos.get(efetivada));
+            efetivada.setMovimentacao(movimentacoes.get(efetivada));
+            efetivada.setSituacao(SituacaoTransacaoBanco.CONCILIADA);
+            log.info("Transação {} efetivada herdou a ligação da pendente {}", efetivada.getBancoId(), pendente.getBancoId());
+        });
+        List<TransacaoBanco> herdaram = List.copyOf(herancas.keySet());
+        transacaoBancoRepository.saveAll(herdaram);
+        return herdaram;
+
+    }
+
+    private static long dias(TransacaoBanco a, TransacaoBanco b) {
+        return Math.abs(ChronoUnit.DAYS.between(a.getData(), b.getData()));
     }
 
     /** O lançamento ainda não realizado, realizado na data do banco; vazio se já estava. */

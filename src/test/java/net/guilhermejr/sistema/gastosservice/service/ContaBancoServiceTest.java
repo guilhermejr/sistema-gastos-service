@@ -151,4 +151,49 @@ public class ContaBancoServiceTest {
 
     }
 
+    @Test
+    @DisplayName("Efetivada com outro id e a pendente ainda listada: a efetivada herda a ligação e realiza o lançamento")
+    @SuppressWarnings("unchecked")
+    public void sincronizar_efetivada_herda_ligacao_da_pendente() {
+
+        PluggyClient pluggyClient = Mockito.mock(PluggyClient.class);
+        TransacaoBancoRepository transacaoBancoRepository = Mockito.mock(TransacaoBancoRepository.class);
+        LancamentoRepository lancamentoRepository = Mockito.mock(LancamentoRepository.class);
+        Clock dia27 = Clock.fixed(LocalDate.of(2026, 10, 27).atStartOfDay(ZoneId.of("America/Bahia")).toInstant(), ZoneId.of("America/Bahia"));
+        ContaBancoService service = new ContaBancoService(pluggyClient, Mockito.mock(ContaRepository.class), transacaoBancoRepository,
+                lancamentoRepository, null, null, Mockito.mock(ContaMapper.class), null, dia27);
+
+        Conta conta = new Conta();
+        conta.setBancoContaId("cc1");
+        conta.setBancoInicio(LocalDate.of(2026, 10, 11));
+        Lancamento salario = naoRealizado(83L);
+        TransacaoBanco agendada = ligada("agendada", salario, true);
+        ContaBancoService.preencher(agendada, transacao("agendada", "16811.29", "2026-10-27T12:00:00Z", "Salário FOLHA PAGAMENTO MENSAL", "PENDING"));
+        Mockito.when(transacaoBancoRepository.findAllByConta(conta)).thenReturn(new ArrayList<>(List.of(agendada)));
+        Mockito.when(pluggyClient.transacoes(Mockito.any(), Mockito.eq("cc1"))).thenReturn(List.of(
+                transacao("agendada", "16811.29", "2026-10-27T12:00:00Z", "Salário FOLHA PAGAMENTO MENSAL", "PENDING"),
+                transacao("efetivada", "16811.29", "2026-10-27T12:00:00Z", "Salário ITAU UNIBANCO S.A."),
+                // Outro valor não herda.
+                transacao("outra", "16811.30", "2026-10-27T12:00:00Z", "Pix recebido")));
+        Mockito.when(pluggyClient.contas(Mockito.any())).thenReturn(List.of());
+
+        service.sincronizar(conta);
+
+        ArgumentCaptor<List<TransacaoBanco>> novas = ArgumentCaptor.forClass(List.class);
+        Mockito.verify(transacaoBancoRepository, Mockito.times(2)).saveAll(novas.capture());
+        TransacaoBanco efetivada = novas.getAllValues().get(0).stream().filter(t -> t.getBancoId().equals("efetivada")).findFirst().orElseThrow();
+        TransacaoBanco outra = novas.getAllValues().get(0).stream().filter(t -> t.getBancoId().equals("outra")).findFirst().orElseThrow();
+        Assertions.assertSame(salario, efetivada.getLancamento());
+        Assertions.assertEquals(SituacaoTransacaoBanco.CONCILIADA, efetivada.getSituacao());
+        Assertions.assertNull(outra.getLancamento());
+        Assertions.assertEquals(SituacaoTransacaoBanco.A_REVISAR, outra.getSituacao());
+        Assertions.assertNull(agendada.getLancamento());
+        Assertions.assertEquals(SituacaoTransacaoBanco.IGNORADA, agendada.getSituacao());
+        Mockito.verify(transacaoBancoRepository).saveAllAndFlush(List.of(agendada));
+        Assertions.assertTrue(salario.getRealizado());
+        Assertions.assertEquals(LocalDate.of(2026, 10, 27), salario.getData());
+        Mockito.verify(lancamentoRepository).save(salario);
+
+    }
+
 }
