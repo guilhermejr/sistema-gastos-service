@@ -55,8 +55,12 @@ import java.util.stream.Stream;
 @Service
 public class ConciliacaoContaService {
 
-    /** Quantos dias antes e depois do mês os itens do sistema ainda servem de candidatos. */
-    private static final int MARGEM_DIAS = 10;
+    /**
+     * Quantos dias antes e depois do mês os itens do sistema ainda servem de candidatos: a
+     * janela do mesmo valor ({@link ConciliadorConta#DIAS_MESMO_VALOR}), senão um item perto
+     * da virada do mês nem chega ao conciliador.
+     */
+    private static final int MARGEM_DIAS = ConciliadorConta.DIAS_MESMO_VALOR;
     private static final DateTimeFormatter DATA_BRASIL = DateTimeFormatter.ofPattern("dd/MM/yyyy");
 
     private final PluggyClient pluggyClient;

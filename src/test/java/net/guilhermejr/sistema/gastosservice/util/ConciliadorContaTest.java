@@ -117,6 +117,18 @@ public class ConciliadorContaTest {
     }
 
     @Test
+    @DisplayName("Mesmo valor casa com até 15 dias de diferença, não com 16")
+    public void mesmo_valor_ate_15_dias() {
+
+        ConciliadorConta.Item pix = lancamento(TipoLancamento.D, "100.00", "2026-10-16");
+        Assertions.assertEquals(SugestaoConciliacao.CONCILIAR, unica(ConciliadorConta.sugerir(
+                List.of(banco("-100", "2026-10-01", "Pix enviado FRANCISCO")), List.of(pix))).tipo());
+        Assertions.assertEquals(SugestaoConciliacao.CRIAR, unica(ConciliadorConta.sugerir(
+                List.of(banco("-100", "2026-09-30", "Pix enviado FRANCISCO")), List.of(pix))).tipo());
+
+    }
+
+    @Test
     @DisplayName("Entrada não casa com saída do mesmo valor")
     public void sentido_diferente() {
 

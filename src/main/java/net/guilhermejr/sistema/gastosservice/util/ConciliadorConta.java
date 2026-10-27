@@ -37,7 +37,7 @@ import java.util.stream.Collectors;
  */
 public final class ConciliadorConta {
 
-    static final int DIAS_MESMO_VALOR = 10;
+    public static final int DIAS_MESMO_VALOR = 15;
     static final int DIAS = 5;
 
     private ConciliadorConta() {
