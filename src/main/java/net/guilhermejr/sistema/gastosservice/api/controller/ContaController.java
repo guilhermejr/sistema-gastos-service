@@ -8,6 +8,7 @@ import net.guilhermejr.sistema.gastosservice.api.request.ConfirmarConciliacaoCon
 import net.guilhermejr.sistema.gastosservice.api.request.ContaBancoRequest;
 import net.guilhermejr.sistema.gastosservice.api.request.ContaRequest;
 import net.guilhermejr.sistema.gastosservice.api.request.CriarDoBancoRequest;
+import net.guilhermejr.sistema.gastosservice.api.request.PagarFaturaContaRequest;
 import net.guilhermejr.sistema.gastosservice.api.request.RendimentoContaRequest;
 import net.guilhermejr.sistema.gastosservice.api.response.ConciliacaoContaResponse;
 import net.guilhermejr.sistema.gastosservice.api.response.ContaResponse;
@@ -164,6 +165,15 @@ public class ContaController {
 
         log.info("Criando lançamento a partir da transação do banco {} da conta: {}", transacaoId, id);
         return ResponseEntity.status(HttpStatus.OK).body(conciliacaoContaService.criar(id, transacaoId, criarDoBancoRequest));
+
+    }
+
+    @PostMapping("/{id}/banco/transacoes/{transacaoId}/pagar-fatura")
+    public ResponseEntity<ConciliacaoContaResponse> pagarFaturaDaTransacao(@PathVariable Long id, @PathVariable Long transacaoId,
+                                                                           @Valid @RequestBody PagarFaturaContaRequest pagarFaturaContaRequest) {
+
+        log.info("Pagando fatura com a transação do banco {} da conta: {}", transacaoId, id);
+        return ResponseEntity.status(HttpStatus.OK).body(conciliacaoContaService.pagarFatura(id, transacaoId, pagarFaturaContaRequest));
 
     }
 

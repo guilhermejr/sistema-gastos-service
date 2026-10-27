@@ -6,17 +6,21 @@ import net.guilhermejr.sistema.gastosservice.api.request.ConciliarContaRequest;
 import net.guilhermejr.sistema.gastosservice.api.request.ConfirmarConciliacaoContaRequest;
 import net.guilhermejr.sistema.gastosservice.api.request.CriarDoBancoRequest;
 import net.guilhermejr.sistema.gastosservice.api.request.LancamentoRequest;
+import net.guilhermejr.sistema.gastosservice.api.request.PagarFaturaContaRequest;
 import net.guilhermejr.sistema.gastosservice.api.request.RendimentoContaRequest;
 import net.guilhermejr.sistema.gastosservice.api.response.ConciliacaoContaResponse;
 import net.guilhermejr.sistema.gastosservice.api.response.LancamentoResponse;
 import net.guilhermejr.sistema.gastosservice.client.PluggyClient;
+import net.guilhermejr.sistema.gastosservice.domain.entity.Cartao;
 import net.guilhermejr.sistema.gastosservice.domain.entity.Conta;
 import net.guilhermejr.sistema.gastosservice.domain.entity.Lancamento;
 import net.guilhermejr.sistema.gastosservice.domain.entity.Movimentacao;
 import net.guilhermejr.sistema.gastosservice.domain.entity.TransacaoBanco;
 import net.guilhermejr.sistema.gastosservice.domain.enums.SituacaoTransacaoBanco;
+import net.guilhermejr.sistema.gastosservice.domain.enums.SugestaoConciliacao;
 import net.guilhermejr.sistema.gastosservice.domain.enums.TipoLancamento;
 import net.guilhermejr.sistema.gastosservice.domain.enums.TipoMovimentacao;
+import net.guilhermejr.sistema.gastosservice.domain.repository.CartaoRepository;
 import net.guilhermejr.sistema.gastosservice.domain.repository.LancamentoRepository;
 import net.guilhermejr.sistema.gastosservice.domain.repository.MovimentacaoRepository;
 import net.guilhermejr.sistema.gastosservice.domain.repository.TransacaoBancoRepository;
@@ -48,6 +52,9 @@ public class ConciliacaoContaServiceTest {
     private Conta conta;
     private TransacaoBanco transacao;
     private SaldoService saldoService;
+    private FaturaService faturaService;
+    private CartaoService cartaoService;
+    private CartaoRepository cartaoRepository;
 
     @BeforeEach
     public void preparar() {
@@ -63,8 +70,12 @@ public class ConciliacaoContaServiceTest {
         ConverteStringUtil converteStringUtil = Mockito.mock(ConverteStringUtil.class);
         Mockito.when(converteStringUtil.toYearMonth(2026, 10)).thenReturn(YearMonth.of(2026, 10));
         Clock clock = Clock.fixed(LocalDate.of(2026, 10, 30).atStartOfDay(ZoneId.of("America/Bahia")).toInstant(), ZoneId.of("America/Bahia"));
+        faturaService = Mockito.mock(FaturaService.class);
+        Mockito.when(faturaService.pendente(Mockito.any(), Mockito.any())).thenReturn(BigDecimal.ZERO);
+        cartaoService = Mockito.mock(CartaoService.class);
+        cartaoRepository = Mockito.mock(CartaoRepository.class);
         service = new ConciliacaoContaService(pluggyClient, contaService, saldoService, Mockito.mock(RecorrenciaService.class),
-                lancamentoService, lancamentoRepository, movimentacaoRepository, transacaoBancoRepository, Mockito.mock(TransacaoBancoMapper.class),
+                lancamentoService, faturaService, cartaoService, cartaoRepository, lancamentoRepository, movimentacaoRepository, transacaoBancoRepository, Mockito.mock(TransacaoBancoMapper.class),
                 converteStringUtil, Mockito.mock(AuthenticationCurrentUserService.class, Answers.RETURNS_DEEP_STUBS), clock);
 
         conta = new Conta();
@@ -295,6 +306,71 @@ public class ConciliacaoContaServiceTest {
 
         Assertions.assertNull(transacao.getMovimentacao());
         Assertions.assertEquals(SituacaoTransacaoBanco.A_REVISAR, transacao.getSituacao());
+
+    }
+
+    private Cartao nubank() {
+        Cartao nubank = new Cartao();
+        nubank.setId(2L);
+        nubank.setNome("Nubank");
+        nubank.setDiaVencimento(27);
+        Mockito.when(cartaoService.cartaoDoUsuario(2L)).thenReturn(nubank);
+        return nubank;
+    }
+
+    @Test
+    @DisplayName("Saída só no banco com o pendente exato de uma fatura não paga: sugere pagar a fatura")
+    public void sugere_pagar_fatura() {
+
+        transacao.setDescricao("Pix enviado GUILHERME AGUIAR DE OLIVEIRA JUNIOR");
+        Cartao nubank = nubank();
+        Mockito.when(cartaoRepository.findAllByUsuarioOrderByOrdemAscNomeAsc(Mockito.any())).thenReturn(List.of(nubank));
+        Mockito.when(faturaService.pendente(nubank, YearMonth.of(2026, 10))).thenReturn(new BigDecimal("2395.26"));
+        Mockito.when(transacaoBancoRepository.findAllByContaAndDataBetweenOrderByDataDescIdDesc(Mockito.eq(conta), Mockito.any(), Mockito.any()))
+                .thenReturn(List.of(transacao));
+
+        ConciliacaoContaResponse resposta = service.conciliacao(2L, 2026, 10);
+
+        Assertions.assertEquals(1, resposta.getLinhas().size());
+        Assertions.assertEquals(SugestaoConciliacao.PAGAR_FATURA, resposta.getLinhas().get(0).getSugestao());
+        Assertions.assertEquals(1, resposta.getLinhas().get(0).getFaturas().size());
+        Assertions.assertEquals(2L, resposta.getLinhas().get(0).getFaturas().get(0).getCartaoId());
+        Assertions.assertEquals(LocalDate.of(2026, 10, 27), resposta.getLinhas().get(0).getFaturas().get(0).getVencimento());
+
+    }
+
+    @Test
+    @DisplayName("Pagar a fatura pela transação paga na data do banco, com a conta, e liga ao pagamento")
+    public void pagar_fatura() {
+
+        Cartao nubank = nubank();
+        Mockito.when(faturaService.pendente(nubank, YearMonth.of(2026, 10))).thenReturn(new BigDecimal("2395.26"));
+        Movimentacao pagamento = new Movimentacao();
+        pagamento.setId(40L);
+        pagamento.setTipo(TipoMovimentacao.PAGAMENTO_FATURA);
+        pagamento.setContaOrigem(conta);
+        pagamento.setValor(new BigDecimal("2395.26"));
+        pagamento.setData(LocalDate.of(2026, 10, 28));
+        Mockito.when(faturaService.registrarPagamento(nubank, YearMonth.of(2026, 10), conta, LocalDate.of(2026, 10, 28))).thenReturn(pagamento);
+        Mockito.when(movimentacaoRepository.findByIdAndUsuario(Mockito.eq(40L), Mockito.any())).thenReturn(Optional.of(pagamento));
+
+        service.pagarFatura(2L, 7L, PagarFaturaContaRequest.builder().cartaoId(2L).ano(2026).mes(10).build());
+
+        Assertions.assertSame(pagamento, transacao.getMovimentacao());
+        Assertions.assertEquals(SituacaoTransacaoBanco.CONCILIADA, transacao.getSituacao());
+
+    }
+
+    @Test
+    @DisplayName("Pagar a fatura é recusado quando o pendente já não é o valor do banco")
+    public void pagar_fatura_valor_mudou() {
+
+        Cartao nubank = nubank();
+        Mockito.when(faturaService.pendente(nubank, YearMonth.of(2026, 10))).thenReturn(new BigDecimal("2000.00"));
+        PagarFaturaContaRequest request = PagarFaturaContaRequest.builder().cartaoId(2L).ano(2026).mes(10).build();
+
+        Assertions.assertThrows(ExceptionDefault.class, () -> service.pagarFatura(2L, 7L, request));
+        Mockito.verify(faturaService, Mockito.never()).registrarPagamento(Mockito.any(), Mockito.any(), Mockito.any(), Mockito.any());
 
     }
 

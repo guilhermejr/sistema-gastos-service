@@ -22,5 +22,7 @@ public class LinhaConciliacaoContaResponse {
     private ItemContaResponse ligado;
     /** Para criar: a categoria usada da última vez com a mesma categoria do banco. */
     private Long categoriaSugeridaId;
+    /** Para pagar fatura: as faturas não pagas com o pendente igual ao valor da transação. */
+    private List<FaturaResumidaResponse> faturas;
 
 }

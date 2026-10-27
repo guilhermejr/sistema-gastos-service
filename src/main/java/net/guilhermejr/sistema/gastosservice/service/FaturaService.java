@@ -76,7 +76,6 @@ public class FaturaService {
 
         Cartao cartao = cartaoService.cartaoDoUsuario(cartaoId);
         YearMonth mesFatura = converteStringUtil.toYearMonth(ano, mes);
-        LocalDate vencimento = CalendarioUtil.vencimentoNoMes(mesFatura, cartao.getDiaVencimento());
 
         Conta conta = pagamentoFaturaRequest.getContaId() == null
                 ? cartao.getConta()
@@ -89,6 +88,16 @@ public class FaturaService {
                 ? LocalDate.now(clock)
                 : converteStringUtil.toLocalDate(pagamentoFaturaRequest.getData());
 
+        registrarPagamento(cartao, mesFatura, conta, data);
+        return retornar(cartao, mesFatura);
+
+    }
+
+    /** O pagamento em si: a movimentação que debita a conta, com os pendentes ligados a ela. */
+    @Transactional
+    public Movimentacao registrarPagamento(Cartao cartao, YearMonth mesFatura, Conta conta, LocalDate data) {
+
+        LocalDate vencimento = CalendarioUtil.vencimentoNoMes(mesFatura, cartao.getDiaVencimento());
         List<Lancamento> pendentes = lancamentos(cartao, mesFatura).stream().filter(l -> !l.getRealizado()).toList();
         BigDecimal valor = liquido(pendentes);
         if (valor.signum() <= 0) {
@@ -112,9 +121,14 @@ public class FaturaService {
         });
         lancamentoRepository.saveAll(pendentes);
 
-        log.info("Fatura {} do cartão {} paga: {}", mesFatura, cartaoId, valor);
-        return retornar(cartao, mesFatura);
+        log.info("Fatura {} do cartão {} paga: {}", mesFatura, cartao.getId(), valor);
+        return pagamentoSave;
 
+    }
+
+    /** O que falta pagar na fatura do mês: despesas menos estornos ainda não realizados. */
+    public BigDecimal pendente(Cartao cartao, YearMonth mes) {
+        return liquido(lancamentos(cartao, mes).stream().filter(l -> !l.getRealizado()).toList());
     }
 
     /**

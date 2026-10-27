@@ -11,5 +11,7 @@ public enum SugestaoConciliacao {
     /** Nenhum lançamento: criar um a partir do banco. */
     CRIAR,
     /** Não é compra (pagamento da fatura): ignorar. */
-    IGNORAR
+    IGNORAR,
+    /** Só na conta: saída com o valor pendente exato de uma fatura não paga. Pagar a fatura e ligar. */
+    PAGAR_FATURA
 }

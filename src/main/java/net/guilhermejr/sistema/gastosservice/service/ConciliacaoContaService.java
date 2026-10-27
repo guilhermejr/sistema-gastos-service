@@ -8,12 +8,15 @@ import net.guilhermejr.sistema.gastosservice.api.request.ConciliarContaRequest;
 import net.guilhermejr.sistema.gastosservice.api.request.ConfirmarConciliacaoContaRequest;
 import net.guilhermejr.sistema.gastosservice.api.request.CriarDoBancoRequest;
 import net.guilhermejr.sistema.gastosservice.api.request.LancamentoRequest;
+import net.guilhermejr.sistema.gastosservice.api.request.PagarFaturaContaRequest;
 import net.guilhermejr.sistema.gastosservice.api.request.RendimentoContaRequest;
 import net.guilhermejr.sistema.gastosservice.api.response.ConciliacaoContaResponse;
+import net.guilhermejr.sistema.gastosservice.api.response.FaturaResumidaResponse;
 import net.guilhermejr.sistema.gastosservice.api.response.ItemContaResponse;
 import net.guilhermejr.sistema.gastosservice.api.response.LancamentoResponse;
 import net.guilhermejr.sistema.gastosservice.api.response.LinhaConciliacaoContaResponse;
 import net.guilhermejr.sistema.gastosservice.client.PluggyClient;
+import net.guilhermejr.sistema.gastosservice.domain.entity.Cartao;
 import net.guilhermejr.sistema.gastosservice.domain.entity.Categoria;
 import net.guilhermejr.sistema.gastosservice.domain.entity.Conta;
 import net.guilhermejr.sistema.gastosservice.domain.entity.Lancamento;
@@ -24,11 +27,13 @@ import net.guilhermejr.sistema.gastosservice.domain.enums.Repeticao;
 import net.guilhermejr.sistema.gastosservice.domain.enums.SituacaoTransacaoBanco;
 import net.guilhermejr.sistema.gastosservice.domain.enums.SugestaoConciliacao;
 import net.guilhermejr.sistema.gastosservice.domain.enums.TipoLancamento;
+import net.guilhermejr.sistema.gastosservice.domain.repository.CartaoRepository;
 import net.guilhermejr.sistema.gastosservice.domain.repository.LancamentoRepository;
 import net.guilhermejr.sistema.gastosservice.domain.repository.MovimentacaoRepository;
 import net.guilhermejr.sistema.gastosservice.domain.repository.TransacaoBancoRepository;
 import net.guilhermejr.sistema.gastosservice.exception.ExceptionDefault;
 import net.guilhermejr.sistema.gastosservice.exception.ExceptionNotFound;
+import net.guilhermejr.sistema.gastosservice.util.CalendarioUtil;
 import net.guilhermejr.sistema.gastosservice.util.ConciliadorConta;
 import net.guilhermejr.sistema.gastosservice.util.ConverteStringUtil;
 import org.springframework.stereotype.Service;
@@ -68,6 +73,9 @@ public class ConciliacaoContaService {
     private final SaldoService saldoService;
     private final RecorrenciaService recorrenciaService;
     private final LancamentoService lancamentoService;
+    private final FaturaService faturaService;
+    private final CartaoService cartaoService;
+    private final CartaoRepository cartaoRepository;
     private final LancamentoRepository lancamentoRepository;
     private final MovimentacaoRepository movimentacaoRepository;
     private final TransacaoBancoRepository transacaoBancoRepository;
@@ -137,6 +145,31 @@ public class ConciliacaoContaService {
         transacao.setMovimentacao(null);
         transacao.setSituacao(SituacaoTransacaoBanco.IMPORTADA);
         transacaoBancoRepository.save(transacao);
+        return conciliacao(conta, YearMonth.from(transacao.getData()));
+
+    }
+
+    /**
+     * Paga a fatura com a conta, na data e no valor da transação, e liga a transação ao
+     * pagamento. Recusa se o pendente da fatura já não é o valor do banco.
+     */
+    @Transactional
+    public ConciliacaoContaResponse pagarFatura(Long contaId, Long transacaoId, PagarFaturaContaRequest pagarFaturaContaRequest) {
+
+        Conta conta = contaLigada(contaId);
+        TransacaoBanco transacao = transacaoARevisar(conta, transacaoId);
+        if (transacao.getTipo() != TipoLancamento.D) {
+            throw new ExceptionDefault("Só uma saída da conta paga fatura.");
+        }
+        Cartao cartao = cartaoService.cartaoDoUsuario(pagarFaturaContaRequest.getCartaoId());
+        YearMonth mesFatura = converteStringUtil.toYearMonth(pagarFaturaContaRequest.getAno(), pagarFaturaContaRequest.getMes());
+        BigDecimal pendente = faturaService.pendente(cartao, mesFatura);
+        if (pendente.compareTo(transacao.getValor()) != 0) {
+            throw new ExceptionDefault("O pendente da fatura (" + moeda(pendente) + ") não é o valor do banco (" + moeda(transacao.getValor()) + ").");
+        }
+        Movimentacao pagamento = faturaService.registrarPagamento(cartao, mesFatura, conta, transacao.getData());
+        ligar(conta, transacao, null, pagamento.getId(), false);
+        log.info("Conta {}: transação {} pagou a fatura {} do cartão {}", contaId, transacaoId, mesFatura, cartao.getId());
         return conciliacao(conta, YearMonth.from(transacao.getData()));
 
     }
@@ -230,11 +263,16 @@ public class ConciliacaoContaService {
         ConciliadorConta.Resultado resultado = ConciliadorConta.sugerir(aRevisar, itens);
 
         List<LinhaConciliacaoContaResponse> linhas = new ArrayList<>();
-        resultado.sugestoes().forEach(s -> linhas.add(new LinhaConciliacaoContaResponse(transacaoBancoMapper.mapObject(s.transacao()),
-                s.tipo(), s.candidatos().stream().map(ConciliacaoContaService::item).toList(), null,
-                s.tipo() == SugestaoConciliacao.CRIAR ? categoriaSugerida(conta, s.transacao()) : null)));
+        FaturasAPagar faturasAPagar = new FaturasAPagar(conta);
+        resultado.sugestoes().forEach(s -> {
+            List<FaturaResumidaResponse> faturas = s.tipo() == SugestaoConciliacao.CRIAR ? faturasAPagar.comValor(s.transacao()) : List.of();
+            SugestaoConciliacao tipo = faturas.isEmpty() ? s.tipo() : SugestaoConciliacao.PAGAR_FATURA;
+            linhas.add(new LinhaConciliacaoContaResponse(transacaoBancoMapper.mapObject(s.transacao()),
+                    tipo, s.candidatos().stream().map(ConciliacaoContaService::item).toList(), null,
+                    tipo == SugestaoConciliacao.CRIAR ? categoriaSugerida(conta, s.transacao()) : null, faturas));
+        });
         transacoes.stream().filter(t -> !aRevisar(t)).forEach(t -> linhas.add(new LinhaConciliacaoContaResponse(transacaoBancoMapper.mapObject(t),
-                null, List.of(), ligado(t), null)));
+                null, List.of(), ligado(t), null, List.of())));
 
         // Só no sistema: do mês, a partir da ligação e até hoje — o futuro ainda não aconteceu.
         LocalDate hoje = LocalDate.now(clock);
@@ -269,6 +307,52 @@ public class ConciliacaoContaService {
             return null;
         }
         return diferenca;
+
+    }
+
+    /**
+     * Faturas não pagas com o pendente igual ao valor de uma saída da conta: de qualquer
+     * cartão do usuário (a conta padrão do cartão não importa, paga-se de onde quiser), com
+     * vencimento no mês da transação, no anterior ou no seguinte. Os pendentes são
+     * calculados uma vez por fatura.
+     */
+    private final class FaturasAPagar {
+
+        private final Conta conta;
+        private final Map<Cartao, Map<YearMonth, BigDecimal>> pendentes = new IdentityHashMap<>();
+        private List<Cartao> cartoes;
+
+        private FaturasAPagar(Conta conta) {
+            this.conta = conta;
+        }
+
+        List<FaturaResumidaResponse> comValor(TransacaoBanco transacao) {
+
+            if (transacao.getTipo() != TipoLancamento.D) {
+                return List.of();
+            }
+            if (cartoes == null) {
+                cartoes = cartaoRepository.findAllByUsuarioOrderByOrdemAscNomeAsc(conta.getUsuario());
+            }
+            YearMonth mes = YearMonth.from(transacao.getData());
+            List<FaturaResumidaResponse> faturas = new ArrayList<>();
+            for (Cartao cartao : cartoes) {
+                for (YearMonth mesFatura : List.of(mes.minusMonths(1), mes, mes.plusMonths(1))) {
+                    BigDecimal pendente = pendentes.computeIfAbsent(cartao, c -> new HashMap<>())
+                            .computeIfAbsent(mesFatura, m -> faturaService.pendente(cartao, m));
+                    if (pendente.compareTo(transacao.getValor()) == 0) {
+                        faturas.add(FaturaResumidaResponse.builder()
+                                .cartaoId(cartao.getId())
+                                .cartaoNome(cartao.getNome())
+                                .vencimento(CalendarioUtil.vencimentoNoMes(mesFatura, cartao.getDiaVencimento()))
+                                .pendente(pendente)
+                                .build());
+                    }
+                }
+            }
+            return faturas;
+
+        }
 
     }
 
