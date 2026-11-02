@@ -17,6 +17,7 @@ import net.guilhermejr.sistema.gastosservice.domain.entity.Lancamento;
 import net.guilhermejr.sistema.gastosservice.domain.entity.Movimentacao;
 import net.guilhermejr.sistema.gastosservice.domain.repository.ContaRepository;
 import net.guilhermejr.sistema.gastosservice.domain.repository.LancamentoRepository;
+import net.guilhermejr.sistema.gastosservice.domain.repository.MovimentacaoRepository;
 import net.guilhermejr.sistema.gastosservice.domain.repository.TransacaoBancoRepository;
 import net.guilhermejr.sistema.gastosservice.exception.ExceptionDefault;
 import org.springframework.stereotype.Service;
@@ -51,6 +52,7 @@ public class ContaBancoService {
     private final ContaRepository contaRepository;
     private final TransacaoBancoRepository transacaoBancoRepository;
     private final LancamentoRepository lancamentoRepository;
+    private final MovimentacaoRepository movimentacaoRepository;
     private final ContaService contaService;
     private final SaldoService saldoService;
     private final ContaMapper contaMapper;
@@ -131,7 +133,8 @@ public class ContaBancoService {
      * outro id e precisa achar de novo o lançamento a que estava ligado. Se o banco ainda
      * lista a pendente junto da efetivada, a efetivada herda a ligação ({@link #herdarLigacoes}).
      * Lançamento ligado a uma transação que já aconteceu fica realizado na data do banco:
-     * conciliar uma pendente só liga, e é aqui que ela vira pagamento.
+     * conciliar uma pendente só liga, e é aqui que ela vira pagamento. Pela mesma razão, o
+     * pagamento de fatura ligado a ela passa para a data do banco.
      */
     @Transactional
     public SincronizacaoContaResponse sincronizar(Conta conta) {
@@ -184,6 +187,12 @@ public class ContaBancoService {
                 .map(t -> realizar(t.getLancamento(), t.getData()))
                 .flatMap(Optional::stream)
                 .forEach(lancamentoRepository::save);
+        // Pagamento de fatura ligado a uma pendente: vai para a data em que o banco efetivou.
+        guardadas.values().stream()
+                .filter(t -> vistas.contains(t.getBancoId()) && t.getMovimentacao() != null)
+                .map(t -> ConciliacaoContaService.pagamentoNaDataDoBanco(t.getMovimentacao(), t, hoje))
+                .flatMap(Optional::stream)
+                .forEach(movimentacaoRepository::save);
         pluggyClient.contas(chave).stream()
                 .filter(c -> c.id().equals(conta.getBancoContaId()))
                 .findFirst()

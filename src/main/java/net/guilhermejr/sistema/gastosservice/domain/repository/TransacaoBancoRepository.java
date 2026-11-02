@@ -44,6 +44,9 @@ public interface TransacaoBancoRepository extends JpaRepository<TransacaoBanco, 
     /** A última transação com esta categoria do banco que virou lançamento: a categoria dele é a sugestão. */
     Optional<TransacaoBanco> findFirstByUsuarioAndCategoriaBancoAndLancamentoNotNullOrderByAtualizadoDesc(UUID usuario, String categoriaBanco);
 
+    /** As parcelas de uma compra: mesma data da compra e mesmo total de parcelas. */
+    List<TransacaoBanco> findAllByCartaoAndDataCompraAndTotalParcelas(Cartao cartao, LocalDate dataCompra, Integer totalParcelas);
+
     List<TransacaoBanco> findAllByCartaoAndFaturaBetweenOrderByDataDescIdDesc(Cartao cartao, LocalDate inicio, LocalDate fim);
 
     /**

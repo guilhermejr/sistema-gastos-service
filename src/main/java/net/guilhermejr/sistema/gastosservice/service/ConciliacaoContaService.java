@@ -27,6 +27,7 @@ import net.guilhermejr.sistema.gastosservice.domain.enums.Repeticao;
 import net.guilhermejr.sistema.gastosservice.domain.enums.SituacaoTransacaoBanco;
 import net.guilhermejr.sistema.gastosservice.domain.enums.SugestaoConciliacao;
 import net.guilhermejr.sistema.gastosservice.domain.enums.TipoLancamento;
+import net.guilhermejr.sistema.gastosservice.domain.enums.TipoMovimentacao;
 import net.guilhermejr.sistema.gastosservice.domain.repository.CartaoRepository;
 import net.guilhermejr.sistema.gastosservice.domain.repository.LancamentoRepository;
 import net.guilhermejr.sistema.gastosservice.domain.repository.MovimentacaoRepository;
@@ -363,15 +364,13 @@ public class ConciliacaoContaService {
         }
         if (movimentacaoId != null) {
             Movimentacao movimentacao = movimentacaoLivre(conta, transacao, movimentacaoId);
+            pagamentoNaDataDoBanco(movimentacao, transacao, LocalDate.now(clock)).ifPresent(movimentacaoRepository::save);
             transacao.setMovimentacao(movimentacao);
             transacao.setLancamento(null);
         } else {
             Lancamento lancamento = lancamentoLivre(conta, transacao, lancamentoId);
             boolean aconteceu = transacao.aconteceu(LocalDate.now(clock));
             if (corrigirValor && lancamento.getValor().compareTo(transacao.getValor()) != 0) {
-                if (lancamento.getParcelamento() != null) {
-                    throw new ExceptionDefault("O valor de uma parcela não é corrigido por aqui. Edite a compra parcelada.");
-                }
                 lancamentoService.atualizar(lancamento.getId(), requisicao(lancamento, conta, transacao, aconteceu), Escopo.UNICO);
                 log.info("Lançamento {} corrigido para o valor do banco: {}", lancamento.getId(), transacao.getValor());
             }
@@ -387,6 +386,24 @@ public class ConciliacaoContaService {
         }
         transacao.setSituacao(SituacaoTransacaoBanco.CONCILIADA);
         transacaoBancoRepository.save(transacao);
+
+    }
+
+    /**
+     * O pagamento de fatura ligado a uma transação que já aconteceu passa para a data do
+     * banco — a fatura pode ter sido paga pelo botão, com a data de hoje, e ligada depois
+     * à linha do extrato. É a data que o relatório mostra. Vazio quando não é pagamento de
+     * fatura, a transação ainda é pendente ou a data já é a do banco.
+     */
+    static Optional<Movimentacao> pagamentoNaDataDoBanco(Movimentacao movimentacao, TransacaoBanco transacao, LocalDate hoje) {
+
+        if (movimentacao.getTipo() != TipoMovimentacao.PAGAMENTO_FATURA || !transacao.aconteceu(hoje)
+                || transacao.getData().equals(movimentacao.getData())) {
+            return Optional.empty();
+        }
+        log.info("Pagamento {} passou de {} para {}, a data do banco", movimentacao.getId(), movimentacao.getData(), transacao.getData());
+        movimentacao.setData(transacao.getData());
+        return Optional.of(movimentacao);
 
     }
 

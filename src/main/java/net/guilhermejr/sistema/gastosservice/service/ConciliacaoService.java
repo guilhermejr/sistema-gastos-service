@@ -38,7 +38,9 @@ import java.time.YearMonth;
 import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
+import java.util.stream.Collectors;
 
 /**
  * Conciliação de uma fatura do cartão com o banco: cada transação do banco com o que
@@ -71,7 +73,9 @@ public class ConciliacaoService {
 
     /**
      * Liga a transação do banco a um lançamento da mesma fatura. Com {@code corrigirValor},
-     * o lançamento passa a ter o valor do banco — só ele, não as próximas ocorrências.
+     * o lançamento passa a ter o valor do banco — só ele, não as próximas ocorrências nem
+     * as outras parcelas: cada parcela já tem o seu valor, e o banco costuma pôr os
+     * centavos que sobram da divisão numa parcela diferente da que o sistema escolheu.
      */
     @Transactional
     public ConciliacaoResponse conciliar(Long cartaoId, Long transacaoId, ConciliarRequest conciliarRequest) {
@@ -81,9 +85,6 @@ public class ConciliacaoService {
         Lancamento lancamento = lancamentoLivre(cartao, transacao, conciliarRequest.getLancamentoId());
 
         if (Boolean.TRUE.equals(conciliarRequest.getCorrigirValor()) && lancamento.getValor().compareTo(transacao.getValor()) != 0) {
-            if (lancamento.getParcelamento() != null) {
-                throw new ExceptionDefault("O valor de uma parcela não é corrigido por aqui. Edite a compra parcelada.");
-            }
             lancamentoService.atualizar(lancamento.getId(), requisicao(lancamento, cartao, transacao.getValor()), Escopo.UNICO);
             log.info("Lançamento {} corrigido para o valor do banco: {}", lancamento.getId(), transacao.getValor());
         }
@@ -126,7 +127,7 @@ public class ConciliacaoService {
         LancamentoRequest lancamentoRequest = LancamentoRequest.builder()
                 .tipo(transacao.getTipo())
                 .descricao(criarDoBancoRequest.getDescricao().trim())
-                .valor(moeda(transacao.getValor().multiply(BigDecimal.valueOf(parcelas))))
+                .valor(moeda(totalDasParcelas(cartao, transacao, parcelas)))
                 .data(transacao.getData().format(DATA_BRASIL))
                 .categoriaId(criarDoBancoRequest.getCategoriaId())
                 .cartaoId(cartao.getId())
@@ -142,6 +143,37 @@ public class ConciliacaoService {
         ligar(transacao, lancamentoService.lancamentoDoUsuario(id), SituacaoTransacaoBanco.IMPORTADA);
         return conciliacao(cartao, mes);
 
+    }
+
+    /**
+     * O que falta pagar da compra: a soma desta parcela com as próximas que o banco já
+     * informa. Multiplicar esta pelo número de parcelas erra os centavos — o banco cobra
+     * 34,09 na primeira e 34,08 nas outras, e a divisão do sistema, com o resto também na
+     * primeira, dá os mesmos valores a partir da soma. Sem todas as parcelas no banco (ou
+     * com duas compras iguais no mesmo dia), multiplica.
+     */
+    private BigDecimal totalDasParcelas(Cartao cartao, TransacaoBanco transacao, int parcelas) {
+
+        if (parcelas == 1 || transacao.getDataCompra() == null) {
+            return transacao.getValor().multiply(BigDecimal.valueOf(parcelas));
+        }
+        String compra = semParcela(transacao.getDescricao());
+        Map<Integer, List<TransacaoBanco>> porParcela = transacaoBancoRepository
+                .findAllByCartaoAndDataCompraAndTotalParcelas(cartao, transacao.getDataCompra(), transacao.getTotalParcelas()).stream()
+                .filter(t -> t.getTipo() == transacao.getTipo() && t.getParcela() != null && t.getParcela() >= transacao.getParcela()
+                        && semParcela(t.getDescricao()).equals(compra))
+                .collect(Collectors.groupingBy(TransacaoBanco::getParcela));
+        boolean completa = porParcela.size() == parcelas && porParcela.values().stream().allMatch(l -> l.size() == 1);
+        if (!completa) {
+            return transacao.getValor().multiply(BigDecimal.valueOf(parcelas));
+        }
+        return porParcela.values().stream().map(l -> l.get(0).getValor()).reduce(BigDecimal.ZERO, BigDecimal::add);
+
+    }
+
+    /** "HNA*OBOTICARIOLAUR02/10" → "HNA*OBOTICARIOLAUR": a descrição da compra, igual em todas as parcelas. */
+    static String semParcela(String descricao) {
+        return descricao.replaceFirst("\\s*\\d{1,2}/\\d{1,2}$", "").trim();
     }
 
     @Transactional

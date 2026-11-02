@@ -22,6 +22,8 @@ public class FaturaResumidaResponse {
     private StatusFatura status;
     private BigDecimal total;
     private BigDecimal pendente;
+    /** Quitada (nada pendente), a data do último pagamento; senão nulo. O relatório mostra a fatura nela. */
+    private LocalDate pagamento;
     /** Só no dashboard, em cartão ligado ao banco com algo a conciliar; nulo nos outros casos. */
     private PendenciaConciliacaoResponse conciliacao;
     /** Só no dashboard, quando esta é uma fatura fechada ainda não paga: a atual, aberta. Fora do total de faturas. */

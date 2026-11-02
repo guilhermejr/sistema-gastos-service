@@ -10,6 +10,7 @@ import net.guilhermejr.sistema.gastosservice.domain.enums.SituacaoTransacaoBanco
 import net.guilhermejr.sistema.gastosservice.domain.enums.TipoLancamento;
 import net.guilhermejr.sistema.gastosservice.domain.repository.ContaRepository;
 import net.guilhermejr.sistema.gastosservice.domain.repository.LancamentoRepository;
+import net.guilhermejr.sistema.gastosservice.domain.repository.MovimentacaoRepository;
 import net.guilhermejr.sistema.gastosservice.domain.repository.TransacaoBancoRepository;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.DisplayName;
@@ -79,7 +80,7 @@ public class ContaBancoServiceTest {
         ContaRepository contaRepository = Mockito.mock(ContaRepository.class);
         TransacaoBancoRepository transacaoBancoRepository = Mockito.mock(TransacaoBancoRepository.class);
         ContaBancoService service = new ContaBancoService(pluggyClient, contaRepository, transacaoBancoRepository,
-                Mockito.mock(LancamentoRepository.class), null, null, Mockito.mock(ContaMapper.class), null, CLOCK);
+                Mockito.mock(LancamentoRepository.class), Mockito.mock(MovimentacaoRepository.class), null, null, Mockito.mock(ContaMapper.class), null, CLOCK);
 
         Conta conta = new Conta();
         conta.setBancoContaId("cc1");
@@ -120,7 +121,7 @@ public class ContaBancoServiceTest {
         TransacaoBancoRepository transacaoBancoRepository = Mockito.mock(TransacaoBancoRepository.class);
         LancamentoRepository lancamentoRepository = Mockito.mock(LancamentoRepository.class);
         ContaBancoService service = new ContaBancoService(pluggyClient, Mockito.mock(ContaRepository.class), transacaoBancoRepository,
-                lancamentoRepository, null, null, Mockito.mock(ContaMapper.class), null, CLOCK);
+                lancamentoRepository, Mockito.mock(MovimentacaoRepository.class), null, null, Mockito.mock(ContaMapper.class), null, CLOCK);
 
         Conta conta = new Conta();
         conta.setBancoContaId("cc1");
@@ -161,7 +162,7 @@ public class ContaBancoServiceTest {
         LancamentoRepository lancamentoRepository = Mockito.mock(LancamentoRepository.class);
         Clock dia27 = Clock.fixed(LocalDate.of(2026, 10, 27).atStartOfDay(ZoneId.of("America/Bahia")).toInstant(), ZoneId.of("America/Bahia"));
         ContaBancoService service = new ContaBancoService(pluggyClient, Mockito.mock(ContaRepository.class), transacaoBancoRepository,
-                lancamentoRepository, null, null, Mockito.mock(ContaMapper.class), null, dia27);
+                lancamentoRepository, Mockito.mock(MovimentacaoRepository.class), null, null, Mockito.mock(ContaMapper.class), null, dia27);
 
         Conta conta = new Conta();
         conta.setBancoContaId("cc1");

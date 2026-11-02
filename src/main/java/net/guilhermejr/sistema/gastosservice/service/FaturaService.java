@@ -28,6 +28,7 @@ import java.time.Clock;
 import java.time.LocalDate;
 import java.time.YearMonth;
 import java.time.format.DateTimeFormatter;
+import java.util.Comparator;
 import java.util.List;
 
 /**
@@ -164,6 +165,9 @@ public class FaturaService {
                 .status(status(vencimento, fechamento, pendente))
                 .total(liquido(lancamentos))
                 .pendente(pendente)
+                .pagamento(pendente.signum() > 0 ? null : movimentacaoRepository
+                        .findAllByCartaoAndFaturaBetweenOrderByDataAscIdAsc(cartao, mes.atDay(1), mes.atEndOfMonth()).stream()
+                        .map(Movimentacao::getData).max(Comparator.naturalOrder()).orElse(null))
                 .build();
 
     }

@@ -26,6 +26,7 @@ import net.guilhermejr.sistema.gastosservice.domain.repository.MovimentacaoRepos
 import net.guilhermejr.sistema.gastosservice.domain.repository.TransacaoBancoRepository;
 import net.guilhermejr.sistema.gastosservice.exception.ExceptionDefault;
 import net.guilhermejr.sistema.gastosservice.util.ConverteStringUtil;
+import net.guilhermejr.sistema.gastosservice.domain.enums.Escopo;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
@@ -187,6 +188,27 @@ public class ConciliacaoContaServiceTest {
     }
 
     @Test
+    @DisplayName("Corrigir o valor de uma parcela muda só ela, não as outras parcelas")
+    public void corrigir_valor_parcela() {
+
+        Lancamento seguro = seguro();
+        seguro.setValor(new BigDecimal("2395.30"));
+        seguro.setParcela(10);
+        seguro.setTotalParcelas(10);
+        seguro.setParcelamento(java.util.UUID.randomUUID());
+        seguro.setCategoria(new net.guilhermejr.sistema.gastosservice.domain.entity.Categoria());
+        seguro.getCategoria().setId(5L);
+
+        service.conciliar(2L, 7L, ConciliarContaRequest.builder().lancamentoId(31L).corrigirValor(true).build());
+
+        ArgumentCaptor<LancamentoRequest> requisicao = ArgumentCaptor.forClass(LancamentoRequest.class);
+        Mockito.verify(lancamentoService).atualizar(Mockito.eq(31L), requisicao.capture(), Mockito.eq(Escopo.UNICO));
+        Assertions.assertEquals("2395,26", requisicao.getValue().getValor());
+        Assertions.assertSame(seguro, transacao.getLancamento());
+
+    }
+
+    @Test
     @DisplayName("Criar a partir de uma pendente cria o lançamento sem realizar")
     public void criar_pendente() {
 
@@ -272,6 +294,45 @@ public class ConciliacaoContaServiceTest {
         ConciliarContaRequest request = ConciliarContaRequest.builder().movimentacaoId(40L).build();
         Assertions.assertThrows(ExceptionDefault.class, () -> service.conciliar(2L, 7L, request));
         Assertions.assertEquals(SituacaoTransacaoBanco.A_REVISAR, transacao.getSituacao());
+
+    }
+
+    private Movimentacao pagamentoDeFatura(LocalDate data) {
+        Movimentacao pagamento = new Movimentacao();
+        pagamento.setId(40L);
+        pagamento.setTipo(TipoMovimentacao.PAGAMENTO_FATURA);
+        pagamento.setContaOrigem(conta);
+        pagamento.setValor(new BigDecimal("2395.26"));
+        pagamento.setData(data);
+        Mockito.when(movimentacaoRepository.findByIdAndUsuario(Mockito.eq(40L), Mockito.any())).thenReturn(Optional.of(pagamento));
+        return pagamento;
+    }
+
+    @Test
+    @DisplayName("Pagamento de fatura feito pelo botão vai para a data do extrato ao ser ligado")
+    public void pagamento_vai_para_a_data_do_banco() {
+
+        // Pago em 30/10 pelo botão; o banco debitou em 28/10.
+        Movimentacao pagamento = pagamentoDeFatura(LocalDate.of(2026, 10, 30));
+
+        service.conciliar(2L, 7L, ConciliarContaRequest.builder().movimentacaoId(40L).build());
+
+        Assertions.assertEquals(LocalDate.of(2026, 10, 28), pagamento.getData());
+        Mockito.verify(movimentacaoRepository).save(pagamento);
+
+    }
+
+    @Test
+    @DisplayName("Ligado a um pagamento agendado (pendente), o pagamento de fatura mantém a data")
+    public void pagamento_pendente_mantem_a_data() {
+
+        transacao.setPendente(true);
+        Movimentacao pagamento = pagamentoDeFatura(LocalDate.of(2026, 10, 30));
+
+        service.conciliar(2L, 7L, ConciliarContaRequest.builder().movimentacaoId(40L).build());
+
+        Assertions.assertEquals(LocalDate.of(2026, 10, 30), pagamento.getData());
+        Mockito.verify(movimentacaoRepository, Mockito.never()).save(Mockito.any());
 
     }
 

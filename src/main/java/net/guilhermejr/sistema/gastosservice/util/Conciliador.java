@@ -8,6 +8,7 @@ import net.guilhermejr.sistema.gastosservice.domain.enums.TipoLancamento;
 import java.math.BigDecimal;
 import java.math.RoundingMode;
 import java.time.LocalDate;
+import java.time.YearMonth;
 import java.time.temporal.ChronoUnit;
 import java.util.*;
 import java.util.stream.Collectors;
@@ -26,9 +27,12 @@ import java.util.stream.Collectors;
  *   (a 10/10 do banco é uma compra à vista no sistema).
  *   Quando há tantas transações quanto lançamentos com a mesma chave, casam em ordem de
  *   data; quando os números diferem, o usuário escolhe entre os candidatos.</li>
- *   <li>À vista, sem par exato: o lançamento à vista mais próximo em valor (até
- *   {@link #TOLERANCIA_REAIS} ou {@link #TOLERANCIA_PERCENTUAL}) e em data (até
- *   {@link #DIAS} dias) → valor diferente, para corrigir ou manter.</li>
+ *   <li>Sem par exato: o lançamento mais próximo em valor (até {@link #TOLERANCIA_REAIS}
+ *   ou {@link #TOLERANCIA_PERCENTUAL}), com as mesmas parcelas restantes e a data perto
+ *   (até {@link #DIAS} dias) → valor diferente, para corrigir ou manter. Numa parcela a
+ *   data que conta é o dia da compra no mês do lançamento: o banco cobra a 2/10 de uma
+ *   compra de 16/10 em 26/11, e o sistema a põe em 16/11. É o caso dos centavos da
+ *   divisão: o banco cobra 34,09 na primeira e 34,08 nas outras.</li>
  *   <li>O resto → criar lançamento.</li>
  * </ol>
  * Lançamentos que não entraram em nenhuma sugestão voltam em {@code semPar}.
@@ -96,11 +100,12 @@ public final class Conciliador {
             usados.addAll(sistemaOrdenado);
         });
 
-        // À vista com valor próximo.
+        // Valor próximo, com as mesmas parcelas restantes.
         semExato.sort(Comparator.comparing(Conciliador::dataDaCompra));
         for (TransacaoBanco transacao : semExato) {
-            Optional<Lancamento> proximo = restantes(transacao.getParcela(), transacao.getTotalParcelas()) != null ? Optional.empty() : lancamentos.stream()
-                    .filter(l -> !usados.contains(l) && l.getTipo() == transacao.getTipo() && restantes(l) == null)
+            Integer restantes = restantes(transacao.getParcela(), transacao.getTotalParcelas());
+            Optional<Lancamento> proximo = lancamentos.stream()
+                    .filter(l -> !usados.contains(l) && l.getTipo() == transacao.getTipo() && Objects.equals(restantes(l), restantes))
                     .filter(l -> perto(transacao, l))
                     .min(Comparator.<Lancamento, BigDecimal>comparing(l -> l.getValor().subtract(transacao.getValor()).abs())
                             .thenComparingLong(l -> distancia(transacao, l)));
@@ -163,8 +168,16 @@ public final class Conciliador {
         return transacao.getDataCompra() != null && transacao.getTotalParcelas() == null ? transacao.getDataCompra() : transacao.getData();
     }
 
+    /**
+     * Dias entre a transação e o lançamento. Numa parcela com a data da compra, compara o
+     * dia da compra no mês do lançamento — é nesse dia que o sistema põe cada parcela.
+     */
     private static long distancia(TransacaoBanco transacao, Lancamento lancamento) {
-        return Math.abs(ChronoUnit.DAYS.between(dataDaCompra(transacao), lancamento.getData()));
+        LocalDate referencia = dataDaCompra(transacao);
+        if (transacao.getTotalParcelas() != null && transacao.getDataCompra() != null) {
+            referencia = CalendarioUtil.diaNoMes(YearMonth.from(lancamento.getData()), transacao.getDataCompra().getDayOfMonth());
+        }
+        return Math.abs(ChronoUnit.DAYS.between(referencia, lancamento.getData()));
     }
 
 }

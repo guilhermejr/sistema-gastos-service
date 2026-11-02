@@ -194,4 +194,33 @@ public class ConciliadorTest {
 
     }
 
+    @Test
+    @DisplayName("Parcela com centavos de diferença sugere corrigir: o banco cobra a 2/10 de 16/10 por 34,08 em 26/11")
+    public void parcela_com_centavos_de_diferenca() {
+
+        TransacaoBanco doBanco = banco("34.08", "2026-11-26", "HNA*OBOTICARIOLAUR02/10", 2, 10);
+        doBanco.setDataCompra(LocalDate.parse("2026-10-16"));
+        Lancamento outraCompra = sistema("22.41", "2026-11-24", 2, 10);
+        Lancamento boticario = sistema("34.09", "2026-11-16", 2, 10);
+
+        Conciliador.Sugestao s = unica(Conciliador.sugerir(List.of(doBanco), List.of(outraCompra, boticario)));
+
+        Assertions.assertEquals(SugestaoConciliacao.VALOR_DIFERENTE, s.tipo());
+        Assertions.assertEquals(List.of(boticario), s.candidatos());
+
+    }
+
+    @Test
+    @DisplayName("Parcela com valor perto mas outro número de parcelas restantes não casa")
+    public void parcela_com_outras_restantes_nao_casa() {
+
+        TransacaoBanco doBanco = banco("36.55", "2026-11-26", "Panini Brasil Ltda02/03", 2, 3);
+        doBanco.setDataCompra(LocalDate.parse("2026-10-18"));
+
+        Conciliador.Sugestao s = unica(Conciliador.sugerir(List.of(doBanco), List.of(sistema("36.57", "2026-11-18", 2, 6))));
+
+        Assertions.assertEquals(SugestaoConciliacao.CRIAR, s.tipo());
+
+    }
+
 }
