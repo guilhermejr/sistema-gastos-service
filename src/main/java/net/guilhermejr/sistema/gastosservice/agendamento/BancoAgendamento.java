@@ -35,7 +35,8 @@ import java.util.Optional;
  * Pluggy responde 400 "MeuPluggy item cant be updated" ao PATCH /items/{id}.
  *
  * <p>Quando a busca aumenta o que há para conciliar (até a fatura atual, no cartão; até
- * hoje, na conta), avisa por push — sem ele, a busca automática passa despercebida.
+ * hoje, na conta), avisa por push — sem ele, a busca automática passa despercebida. Avisa
+ * também, num push à parte, quando a busca mudou o dia de vencimento de um cartão.
  */
 @Log4j2
 @RequiredArgsConstructor
@@ -45,6 +46,7 @@ import java.util.Optional;
 public class BancoAgendamento {
 
     static final String TITULO_AVISO = "Transações para conciliar";
+    static final String TITULO_VENCIMENTO = "Vencimento do cartão mudou";
 
     private final CartaoRepository cartaoRepository;
     private final PluggyClient pluggyClient;
@@ -74,13 +76,18 @@ public class BancoAgendamento {
         }
 
         List<String> avisos = new ArrayList<>();
+        List<String> vencimentos = new ArrayList<>();
         for (Cartao cartao : cartoes) {
             if (!desatualizado(cartao.getBancoSincronizado(), atualizado)) {
                 continue;
             }
             try {
                 int antes = PendenciaConciliacaoService.quantidade(pendenciaConciliacaoService.doCartao(cartao));
-                bancoService.sincronizar(cartao);
+                Integer novoDia = bancoService.sincronizar(cartao).getNovoDiaVencimento();
+                if (novoDia != null) {
+                    vencimentos.add(cartao.getNome() + ": agora vence no dia " + novoDia
+                            + ". As compras não pagas da fatura em aberto em diante foram reposicionadas.");
+                }
                 aviso(cartao.getNome(), antes, PendenciaConciliacaoService.quantidade(pendenciaConciliacaoService.doCartao(cartao)))
                         .ifPresent(avisos::add);
             } catch (Exception e) {
@@ -101,13 +108,21 @@ public class BancoAgendamento {
             }
         }
 
-        if (!avisos.isEmpty()) {
-            try {
-                notificacaoClient.enviarPush(TITULO_AVISO, String.join("\n", avisos));
-                log.info("Aviso de transações a conciliar enviado: {}", avisos);
-            } catch (Exception e) {
-                log.error("Erro ao avisar as transações a conciliar: {}", e.getMessage());
-            }
+        enviar(TITULO_VENCIMENTO, vencimentos);
+        enviar(TITULO_AVISO, avisos);
+
+    }
+
+    private void enviar(String titulo, List<String> linhas) {
+
+        if (linhas.isEmpty()) {
+            return;
+        }
+        try {
+            notificacaoClient.enviarPush(titulo, String.join("\n", linhas));
+            log.info("Aviso \"{}\" enviado: {}", titulo, linhas);
+        } catch (Exception e) {
+            log.error("Erro ao enviar o aviso \"{}\": {}", titulo, e.getMessage());
         }
 
     }

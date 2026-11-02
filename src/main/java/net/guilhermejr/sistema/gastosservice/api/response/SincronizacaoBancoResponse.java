@@ -24,5 +24,7 @@ public class SincronizacaoBancoResponse {
     /** Limite total e disponível do cartão nesta busca; null quando o banco não informou. */
     private BigDecimal limite;
     private BigDecimal limiteDisponivel;
+    /** O novo dia de vencimento, quando esta busca viu que o banco o mudou; senão null. */
+    private Integer novoDiaVencimento;
 
 }

@@ -13,7 +13,9 @@ import org.springframework.web.util.UriUtils;
 
 import java.math.BigDecimal;
 import java.nio.charset.StandardCharsets;
+import java.time.LocalDate;
 import java.time.OffsetDateTime;
+import java.time.format.DateTimeParseException;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
@@ -165,9 +167,28 @@ public class PluggyClient {
     @JsonIgnoreProperties(ignoreUnknown = true)
     public record Conta(String id, String type, String name, String number, BigDecimal balance, DadosCredito creditData) {}
 
-    /** Limite do cartão; o disponível já desconta as parcelas futuras. */
+    /**
+     * Limite do cartão; o disponível já desconta as parcelas futuras. {@code balanceDueDate}
+     * é o vencimento da última fatura fechada ("aaaa-mm-dd", já no próximo dia útil quando
+     * o dia cai em fim de semana ou feriado). O Itaú não informa o fechamento
+     * ({@code balanceCloseDate} vem nulo).
+     */
     @JsonIgnoreProperties(ignoreUnknown = true)
-    public record DadosCredito(BigDecimal creditLimit, BigDecimal availableCreditLimit) {}
+    public record DadosCredito(BigDecimal creditLimit, BigDecimal availableCreditLimit, String balanceDueDate) {
+
+        /** O vencimento como data; null quando o banco não informa ou manda algo que não é data. */
+        public LocalDate vencimento() {
+            if (balanceDueDate == null || balanceDueDate.length() < 10) {
+                return null;
+            }
+            try {
+                return LocalDate.parse(balanceDueDate.substring(0, 10));
+            } catch (DateTimeParseException e) {
+                return null;
+            }
+        }
+
+    }
 
     /**
      * {@code status}: UPDATED, UPDATING, LOGIN_ERROR, OUTDATED ou WAITING_USER_INPUT. O Meu

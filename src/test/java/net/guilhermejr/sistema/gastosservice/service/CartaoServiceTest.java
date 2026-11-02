@@ -9,6 +9,7 @@ import net.guilhermejr.sistema.gastosservice.domain.repository.LancamentoReposit
 import net.guilhermejr.sistema.gastosservice.domain.repository.MovimentacaoRepository;
 import net.guilhermejr.sistema.gastosservice.domain.repository.RecorrenciaRepository;
 import net.guilhermejr.sistema.gastosservice.exception.ExceptionDefault;
+import net.guilhermejr.sistema.gastosservice.util.CalendarioUtil;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
@@ -17,6 +18,7 @@ import org.mockito.Mockito;
 
 import java.time.LocalDate;
 import java.time.YearMonth;
+import java.util.List;
 
 public class CartaoServiceTest {
 
@@ -155,4 +157,47 @@ public class CartaoServiceTest {
 
     }
 
+    private static Lancamento pendente(Cartao cartao, LocalDate data) {
+        Lancamento l = new Lancamento();
+        l.setCartao(cartao);
+        l.setData(data);
+        l.setRealizado(false);
+        l.setFaturaTransferida(false);
+        l.setFatura(CalendarioUtil.vencimentoDaCompra(data, cartao.getDiaVencimento(), cartao.getDiasFechamento()));
+        return l;
+    }
+
+    @Test
+    @DisplayName("Vencimento mudado pelo banco: a fatura fechada fica, da aberta em diante segue o novo ciclo")
+    public void mudar_vencimento_pelo_banco() {
+
+        LancamentoRepository lancamentoRepository = Mockito.mock(LancamentoRepository.class);
+        CartaoService servico = new CartaoService(Mockito.mock(CartaoRepository.class), lancamentoRepository,
+                Mockito.mock(MovimentacaoRepository.class), Mockito.mock(RecorrenciaRepository.class), Mockito.mock(ContaService.class),
+                Mockito.mock(CartaoMapper.class), Mockito.mock(AuthenticationCurrentUserService.class));
+
+        // Vencia dia 6 (fechando dia 29/30) e passa a vencer dia 25 (fechando dia 18).
+        Cartao cartao = new Cartao();
+        cartao.setDiaVencimento(6);
+        cartao.setDiasFechamento(7);
+        cartao.setBancoInicioFatura(LocalDate.of(2026, 11, 6));
+        Lancamento fechada = pendente(cartao, LocalDate.of(2026, 11, 20));   // 06/12, fatura que já fechou
+        Lancamento antesDoFechamento = pendente(cartao, LocalDate.of(2026, 12, 5));  // 06/01
+        Lancamento noFechamento = pendente(cartao, LocalDate.of(2026, 12, 18));      // 06/01
+        Lancamento parcela = pendente(cartao, LocalDate.of(2027, 3, 26));            // 06/04
+        Mockito.when(lancamentoRepository.findAllByCartaoAndRealizadoFalse(cartao))
+                .thenReturn(List.of(fechada, antesDoFechamento, noFechamento, parcela));
+
+        // Em 19/12, com o novo ciclo, a fatura aberta é a de janeiro.
+        servico.mudarVencimento(cartao, 25, YearMonth.of(2027, 1));
+
+        Assertions.assertEquals(25, cartao.getDiaVencimento());
+        Assertions.assertEquals(LocalDate.of(2026, 11, 25), cartao.getBancoInicioFatura());
+        Assertions.assertEquals(LocalDate.of(2026, 12, 25), fechada.getFatura());
+        // Comprada antes do novo fechamento (18/12): o banco a pôs na fatura de dezembro.
+        Assertions.assertEquals(LocalDate.of(2026, 12, 25), antesDoFechamento.getFatura());
+        Assertions.assertEquals(LocalDate.of(2027, 1, 25), noFechamento.getFatura());
+        Assertions.assertEquals(LocalDate.of(2027, 4, 25), parcela.getFatura());
+
+    }
 }

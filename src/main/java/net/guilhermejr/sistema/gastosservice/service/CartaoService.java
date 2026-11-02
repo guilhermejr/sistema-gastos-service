@@ -112,6 +112,39 @@ public class CartaoService {
     }
 
     /**
+     * O banco passou a vencer a fatura em outro dia. Diferente da edição à mão, a fatura
+     * que já fechou fica como o banco a fechou: só os lançamentos não pagos da fatura em
+     * aberto ({@code aberta}) em diante seguem o novo ciclo — o que pode trazer uma compra
+     * para a fatura fechada, quando o banco a fechou depois. Os de antes ficam no mês em
+     * que estão, no novo dia.
+     */
+    @Transactional
+    public void mudarVencimento(Cartao cartao, int diaVencimento, YearMonth aberta) {
+
+        cartao.setDiaVencimento(diaVencimento);
+        if (cartao.getBancoInicioFatura() != null) {
+            cartao.setBancoInicioFatura(CalendarioUtil.vencimentoNoMes(YearMonth.from(cartao.getBancoInicioFatura()), diaVencimento));
+        }
+
+        List<Lancamento> pendentes = lancamentoRepository.findAllByCartaoAndRealizadoFalse(cartao);
+        int reposicionados = 0;
+        for (Lancamento lancamento : pendentes) {
+            YearMonth mes = YearMonth.from(lancamento.getFatura());
+            if (mes.isBefore(aberta)) {
+                lancamento.setFatura(CalendarioUtil.vencimentoNoMes(mes, diaVencimento));
+            } else {
+                posicionarNaFatura(lancamento, true);
+                reposicionados++;
+            }
+        }
+        lancamentoRepository.saveAll(pendentes);
+        cartaoRepository.save(cartao);
+        log.info("Cartão {}: vencimento passou para o dia {}; {} lançamentos reposicionados a partir da fatura de {}",
+                cartao.getId(), diaVencimento, reposicionados, aberta);
+
+    }
+
+    /**
      * Cartão desativado não recebe compras novas, mas as faturas já lançadas continuam
      * aparecendo para pagar. Despesa fixa no cartão precisa ser encerrada antes, senão
      * continuaria gerando compras nele.

@@ -108,4 +108,46 @@ public class CalendarioUtilTest {
 
     }
 
+    @Test
+    @DisplayName("Vencimento do banco é o mesmo dia configurado, ou o próximo dia útil quando o dia não é útil")
+    public void mesmo_vencimento_com_dia_util() {
+
+        // Faturas reais do Personnalité, que vence dia 6.
+        Assertions.assertTrue(CalendarioUtil.mesmoVencimento(LocalDate.of(2026, 10, 6), 6));
+        Assertions.assertTrue(CalendarioUtil.mesmoVencimento(LocalDate.of(2026, 11, 6), 6));
+        // 06/09/2026 foi domingo e 07/09 feriado: venceu em 08/09.
+        Assertions.assertTrue(CalendarioUtil.mesmoVencimento(LocalDate.of(2026, 9, 8), 6));
+        // Dia 31 num sábado (31/10/2026) vence na segunda, já em novembro.
+        Assertions.assertTrue(CalendarioUtil.mesmoVencimento(LocalDate.of(2026, 11, 3), 31));
+
+    }
+
+    @Test
+    @DisplayName("Outro dia que não é adiamento para o dia útil é mudança de vencimento")
+    public void vencimento_mudou() {
+
+        Assertions.assertFalse(CalendarioUtil.mesmoVencimento(LocalDate.of(2026, 12, 21), 6));
+        // 06/10/2026 é terça, dia útil: vencer no dia 7 não é adiamento.
+        Assertions.assertFalse(CalendarioUtil.mesmoVencimento(LocalDate.of(2026, 10, 7), 6));
+        // Antes do dia configurado nunca é adiamento.
+        Assertions.assertFalse(CalendarioUtil.mesmoVencimento(LocalDate.of(2026, 11, 5), 6));
+
+    }
+
+    @Test
+    @DisplayName("Feriados nacionais, inclusive os que dependem da Páscoa, não são dia útil")
+    public void feriados() {
+
+        Assertions.assertEquals(LocalDate.of(2026, 4, 5), CalendarioUtil.pascoa(2026));
+        Assertions.assertEquals(LocalDate.of(2027, 3, 28), CalendarioUtil.pascoa(2027));
+        Assertions.assertFalse(CalendarioUtil.diaUtil(LocalDate.of(2026, 2, 16)));  // Carnaval
+        Assertions.assertFalse(CalendarioUtil.diaUtil(LocalDate.of(2026, 2, 17)));
+        Assertions.assertFalse(CalendarioUtil.diaUtil(LocalDate.of(2026, 4, 3)));   // Sexta-feira Santa
+        Assertions.assertFalse(CalendarioUtil.diaUtil(LocalDate.of(2026, 6, 4)));   // Corpus Christi
+        Assertions.assertFalse(CalendarioUtil.diaUtil(LocalDate.of(2026, 11, 20))); // Consciência Negra
+        Assertions.assertTrue(CalendarioUtil.diaUtil(LocalDate.of(2026, 2, 18)));
+        // Sexta 25/12 → segunda 28/12.
+        Assertions.assertEquals(LocalDate.of(2026, 12, 28), CalendarioUtil.proximoDiaUtil(LocalDate.of(2026, 12, 25)));
+
+    }
 }

@@ -147,6 +147,23 @@ public class BancoService {
         }
 
         String chave = pluggyClient.autenticar();
+        Optional<PluggyClient.DadosCredito> credito = pluggyClient.contas(chave).stream()
+                .filter(conta -> conta.id().equals(cartao.getBancoContaId()) && conta.creditData() != null)
+                .findFirst()
+                .map(PluggyClient.Conta::creditData);
+        // Antes das transações: elas são guardadas no dia de vencimento do cartão.
+        Integer novoDiaVencimento = credito.map(PluggyClient.DadosCredito::vencimento)
+                .filter(vencimento -> !CalendarioUtil.mesmoVencimento(vencimento, cartao.getDiaVencimento()))
+                .map(LocalDate::getDayOfMonth)
+                .orElse(null);
+        if (novoDiaVencimento != null) {
+            int anterior = cartao.getDiaVencimento();
+            cartao.setDiaVencimento(novoDiaVencimento);
+            cartaoService.mudarVencimento(cartao, novoDiaVencimento, faturaService.mesDaFaturaAtual(cartao));
+            log.info("Cartão {}: o banco informou vencimento em {}; dia {} → {}", cartao.getId(),
+                    credito.get().vencimento(), anterior, novoDiaVencimento);
+        }
+
         Map<String, YearMonth> mesPorFatura = pluggyClient.faturas(chave, cartao.getBancoContaId()).stream()
                 .collect(Collectors.toMap(PluggyClient.Fatura::id, fatura -> YearMonth.from(local(fatura.dueDate())), (a, b) -> a));
         List<PluggyClient.Transacao> doBanco = pluggyClient.transacoes(chave, cartao.getBancoContaId());
@@ -186,20 +203,17 @@ public class BancoService {
                 .filter(t -> !vistas.contains(t.getBancoId()) && t.getSituacao() == SituacaoTransacaoBanco.A_REVISAR)
                 .toList();
         transacaoBancoRepository.deleteAll(sumiram);
-        pluggyClient.contas(chave).stream()
-                .filter(conta -> conta.id().equals(cartao.getBancoContaId()) && conta.creditData() != null)
-                .findFirst()
-                .ifPresent(conta -> {
-                    cartao.setBancoLimite(conta.creditData().creditLimit());
-                    cartao.setBancoLimiteDisponivel(conta.creditData().availableCreditLimit());
-                });
+        credito.ifPresent(dados -> {
+            cartao.setBancoLimite(dados.creditLimit());
+            cartao.setBancoLimiteDisponivel(dados.availableCreditLimit());
+        });
         cartao.setBancoSincronizado(LocalDateTime.now(ZoneOffset.UTC));
         cartaoRepository.save(cartao);
 
         log.info("Cartão {}: {} transações do banco ({} novas, {} atualizadas, {} removidas)",
                 cartao.getId(), vistas.size(), novas, atualizadas, sumiram.size());
         return new SincronizacaoBancoResponse(novas, atualizadas, sumiram.size(), vistas.size(), cartao.getBancoSincronizado(),
-                cartao.getBancoLimite(), cartao.getBancoLimiteDisponivel());
+                cartao.getBancoLimite(), cartao.getBancoLimiteDisponivel(), novoDiaVencimento);
 
     }
 

@@ -162,9 +162,10 @@ public class BancoServiceTest {
         Mockito.when(pluggyClient.faturas(Mockito.any(), Mockito.any())).thenReturn(List.of());
         Mockito.when(pluggyClient.transacoes(Mockito.any(), Mockito.any())).thenReturn(List.of());
         Mockito.when(pluggyClient.contas(Mockito.any())).thenReturn(List.of(
-                new PluggyClient.Conta("outro", "CREDIT", "OUTRO", "1111", null, new PluggyClient.DadosCredito(new BigDecimal("1000"), new BigDecimal("10"))),
-                new PluggyClient.Conta("c1", "CREDIT", "PERSONNALITE", "5943", null, new PluggyClient.DadosCredito(new BigDecimal("15500"), new BigDecimal("879.42")))));
+                new PluggyClient.Conta("outro", "CREDIT", "OUTRO", "1111", null, new PluggyClient.DadosCredito(new BigDecimal("1000"), new BigDecimal("10"), "2026-11-20")),
+                new PluggyClient.Conta("c1", "CREDIT", "PERSONNALITE", "5943", null, new PluggyClient.DadosCredito(new BigDecimal("15500"), new BigDecimal("879.42"), "2026-11-06"))));
         Cartao cartao = new Cartao();
+        cartao.setDiaVencimento(6);
         cartao.setBancoContaId("c1");
         cartao.setBancoInicioFatura(FATURA);
 
@@ -175,7 +176,56 @@ public class BancoServiceTest {
         Assertions.assertEquals(new BigDecimal("15500"), cartao.getBancoLimite());
         Assertions.assertEquals(new BigDecimal("879.42"), cartao.getBancoLimiteDisponivel());
         Assertions.assertEquals(new BigDecimal("879.42"), resposta.getLimiteDisponivel());
+        Assertions.assertNull(resposta.getNovoDiaVencimento());
         Mockito.verify(cartaoRepository).save(cartao);
+
+    }
+
+    /** Sincroniza o cartão que vence dia 6 com o banco informando {@code vencimento}. */
+    private static SincronizacaoBancoResponse sincronizarComVencimento(CartaoService cartaoService, String vencimento) {
+
+        PluggyClient pluggyClient = Mockito.mock(PluggyClient.class);
+        FaturaService faturaService = Mockito.mock(FaturaService.class);
+        BancoService bancoService = new BancoService(pluggyClient, Mockito.mock(CartaoRepository.class),
+                Mockito.mock(TransacaoBancoRepository.class), cartaoService, faturaService, Mockito.mock(CartaoMapper.class),
+                Mockito.mock(TransacaoBancoMapper.class), null, null);
+        Mockito.when(pluggyClient.faturas(Mockito.any(), Mockito.any())).thenReturn(List.of());
+        Mockito.when(pluggyClient.transacoes(Mockito.any(), Mockito.any())).thenReturn(List.of());
+        Mockito.when(pluggyClient.contas(Mockito.any())).thenReturn(List.of(new PluggyClient.Conta("c1", "CREDIT", "PERSONNALITE", "5943",
+                null, new PluggyClient.DadosCredito(new BigDecimal("14000"), new BigDecimal("1283.20"), vencimento))));
+        Mockito.when(faturaService.mesDaFaturaAtual(Mockito.any())).thenReturn(YearMonth.of(2027, 1));
+        Cartao cartao = new Cartao();
+        cartao.setDiaVencimento(6);
+        cartao.setDiasFechamento(7);
+        cartao.setBancoContaId("c1");
+        cartao.setBancoInicioFatura(FATURA);
+        return bancoService.sincronizar(cartao);
+
+    }
+
+    @Test
+    @DisplayName("Vencimento do banco em outro dia muda o vencimento do cartão a partir da fatura em aberto")
+    public void banco_mudou_o_vencimento() {
+
+        CartaoService cartaoService = Mockito.mock(CartaoService.class);
+
+        SincronizacaoBancoResponse resposta = sincronizarComVencimento(cartaoService, "2026-12-21");
+
+        Assertions.assertEquals(21, resposta.getNovoDiaVencimento());
+        Mockito.verify(cartaoService).mudarVencimento(Mockito.any(), Mockito.eq(21), Mockito.eq(YearMonth.of(2027, 1)));
+
+    }
+
+    @Test
+    @DisplayName("Vencimento adiado para o dia útil, ou não informado, não muda o cartão")
+    public void adiamento_para_dia_util_nao_muda() {
+
+        CartaoService cartaoService = Mockito.mock(CartaoService.class);
+
+        Assertions.assertNull(sincronizarComVencimento(cartaoService, "2026-09-08").getNovoDiaVencimento());
+        Assertions.assertNull(sincronizarComVencimento(cartaoService, "2026-11-06T00:00:00.000Z").getNovoDiaVencimento());
+        Assertions.assertNull(sincronizarComVencimento(cartaoService, null).getNovoDiaVencimento());
+        Mockito.verifyNoInteractions(cartaoService);
 
     }
 
