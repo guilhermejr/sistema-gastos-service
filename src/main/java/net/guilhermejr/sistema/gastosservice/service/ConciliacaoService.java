@@ -202,6 +202,26 @@ public class ConciliacaoService {
 
     }
 
+    /**
+     * Torna fixo o lançamento ligado a uma transação já revisada — a assinatura que veio
+     * do banco passa a se repetir todo mês no cartão, e a do mês seguinte casa sozinha.
+     */
+    @Transactional
+    public ConciliacaoResponse tornarFixa(Long cartaoId, Long transacaoId) {
+
+        Cartao cartao = cartaoLiberado(cartaoId);
+        TransacaoBanco transacao = transacaoDoCartao(cartao, transacaoId);
+        if (aRevisar(transacao) || transacao.getLancamento() == null) {
+            throw new ExceptionDefault("Ligue a transação a um lançamento antes de torná-lo fixo.");
+        }
+        if (transacao.getLancamento().getTipo() != TipoLancamento.D) {
+            throw new ExceptionDefault("Só uma despesa vira despesa fixa no cartão.");
+        }
+        lancamentoService.tornarFixa(transacao.getLancamento());
+        return conciliacao(cartao, YearMonth.from(transacao.getFatura()));
+
+    }
+
     private ConciliacaoResponse conciliacao(Cartao cartao, YearMonth mesFatura) {
 
         // As despesas fixas do mês precisam existir para casar com o banco, como na fatura.

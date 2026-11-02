@@ -193,6 +193,14 @@ public class CartaoController {
 
     }
 
+    @PostMapping("/{id}/banco/transacoes/{transacaoId}/fixa")
+    public ResponseEntity<ConciliacaoResponse> tornarFixa(@PathVariable Long id, @PathVariable Long transacaoId) {
+
+        log.info("Tornando fixo o lançamento da transação do banco {} do cartão: {}", transacaoId, id);
+        return ResponseEntity.status(HttpStatus.OK).body(conciliacaoService.tornarFixa(id, transacaoId));
+
+    }
+
     @PostMapping("/{id}/banco/transacoes/{transacaoId}/desfazer")
     public ResponseEntity<ConciliacaoResponse> desfazerTransacao(@PathVariable Long id, @PathVariable Long transacaoId) {
 

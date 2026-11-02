@@ -8,6 +8,7 @@ import net.guilhermejr.sistema.gastosservice.api.request.LancamentoRequest;
 import net.guilhermejr.sistema.gastosservice.domain.entity.Cartao;
 import net.guilhermejr.sistema.gastosservice.domain.entity.Categoria;
 import net.guilhermejr.sistema.gastosservice.domain.entity.Lancamento;
+import net.guilhermejr.sistema.gastosservice.domain.entity.Recorrencia;
 import net.guilhermejr.sistema.gastosservice.domain.enums.Repeticao;
 import net.guilhermejr.sistema.gastosservice.domain.enums.TipoLancamento;
 import net.guilhermejr.sistema.gastosservice.domain.repository.CartaoRepository;
@@ -39,6 +40,7 @@ public class LancamentoServiceTest {
     private LancamentoRepository lancamentoRepository;
     private LancamentoService lancamentoService;
     private MovimentacaoRepository movimentacaoRepository;
+    private RecorrenciaService recorrenciaService;
 
     @BeforeEach
     public void preparar() {
@@ -49,7 +51,8 @@ public class LancamentoServiceTest {
         ZoneId zona = ZoneId.of("America/Bahia");
         Clock clock = Clock.fixed(ZonedDateTime.of(HOJE.atTime(10, 0), zona).toInstant(), zona);
 
-        lancamentoService = new LancamentoService(lancamentoRepository, Mockito.mock(RecorrenciaService.class),
+        recorrenciaService = Mockito.mock(RecorrenciaService.class);
+        lancamentoService = new LancamentoService(lancamentoRepository, recorrenciaService,
                 Mockito.mock(CategoriaService.class), Mockito.mock(ContaService.class), Mockito.mock(CartaoService.class),
                 Mockito.mock(LancamentoMapper.class), Mockito.mock(ConverteStringUtil.class), usuario, clock);
 
@@ -184,6 +187,37 @@ public class LancamentoServiceTest {
 
         Assertions.assertThrows(ExceptionDefault.class, () -> servico.inserir(compraNoCartao(Repeticao.UNICA, null, 2026, 10)));
         Mockito.verify(lancamentoRepository, Mockito.never()).save(Mockito.any());
+
+    }
+
+    @Test
+    @DisplayName("Tornar fixo cria a série a partir do lançamento, que vira a primeira ocorrência")
+    public void tornar_fixo() {
+
+        Lancamento assinatura = emConta(true);
+        Recorrencia serie = new Recorrencia();
+        Mockito.when(recorrenciaService.criar(assinatura)).thenReturn(serie);
+
+        lancamentoService.tornarFixa(assinatura);
+
+        Assertions.assertSame(serie, assinatura.getRecorrencia());
+        Assertions.assertEquals(PREVISTA, assinatura.getData());
+        Mockito.verify(lancamentoRepository).save(assinatura);
+
+    }
+
+    @Test
+    @DisplayName("Parcela e lançamento já fixo não viram fixos")
+    public void tornar_fixo_recusa() {
+
+        Lancamento parcela = emConta(false);
+        parcela.setParcelamento(java.util.UUID.randomUUID());
+        Lancamento fixo = new Lancamento();
+        fixo.setRecorrencia(new Recorrencia());
+
+        Assertions.assertThrows(ExceptionDefault.class, () -> lancamentoService.tornarFixa(parcela));
+        Assertions.assertThrows(ExceptionDefault.class, () -> lancamentoService.tornarFixa(fixo));
+        Mockito.verifyNoInteractions(recorrenciaService);
 
     }
 

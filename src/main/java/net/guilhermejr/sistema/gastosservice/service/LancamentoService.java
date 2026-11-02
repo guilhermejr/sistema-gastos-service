@@ -114,6 +114,27 @@ public class LancamentoService {
     }
 
     /**
+     * Transforma um lançamento avulso numa despesa/receita fixa: ele vira a primeira
+     * ocorrência de uma série nova, no mesmo dia, valor, categoria e conta/cartão. As
+     * próximas surgem como nas outras fixas, quando os meses forem consultados. Nada nele
+     * muda — por isso vale também para um lançamento já pago numa fatura.
+     */
+    @Transactional
+    public Lancamento tornarFixa(Lancamento lancamento) {
+
+        if (lancamento.getRecorrencia() != null) {
+            throw new ExceptionDefault("O lançamento já é fixo.");
+        }
+        if (lancamento.getParcelamento() != null) {
+            throw new ExceptionDefault("Uma parcela não vira despesa fixa.");
+        }
+        lancamento.setRecorrencia(recorrenciaService.criar(lancamento));
+        log.info("Lançamento {} virou fixo: série {}", lancamento.getId(), lancamento.getRecorrencia().getId());
+        return lancamentoRepository.save(lancamento);
+
+    }
+
+    /**
      * Marca ou desmarca como pago/recebido. Ao efetivar, a data passa a ser a de hoje,
      * o dia em que o dinheiro de fato saiu ou entrou. Desmarcar não devolve a data antiga.
      */
