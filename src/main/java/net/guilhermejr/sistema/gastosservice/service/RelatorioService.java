@@ -5,6 +5,7 @@ import net.guilhermejr.seguranca.jwt.AuthenticationCurrentUserService;
 import net.guilhermejr.sistema.gastosservice.api.mapper.LancamentoMapper;
 import net.guilhermejr.sistema.gastosservice.api.mapper.MovimentacaoMapper;
 import net.guilhermejr.sistema.gastosservice.api.response.CategoriasMensalResponse;
+import net.guilhermejr.sistema.gastosservice.api.response.FaturasMensaisResponse;
 import net.guilhermejr.sistema.gastosservice.api.response.FaturaResumidaResponse;
 import net.guilhermejr.sistema.gastosservice.api.response.RelatorioMensalResponse;
 import net.guilhermejr.sistema.gastosservice.api.response.TotaisResponse;
@@ -23,6 +24,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
+import java.time.Clock;
 import java.time.LocalDate;
 import java.time.YearMonth;
 import java.util.Comparator;
@@ -61,6 +63,11 @@ public class RelatorioService {
     private final MovimentacaoMapper movimentacaoMapper;
     private final ConverteStringUtil converteStringUtil;
     private final AuthenticationCurrentUserService authenticationCurrentUserService;
+    private final Clock clock;
+
+    /** O gráfico de faturas mostra os meses já vencidos antes do atual e, do atual em diante, os seguintes. */
+    static final int FATURAS_MESES_ANTES = 2;
+    static final int FATURAS_MESES_DEPOIS = 10;
 
     /**
      * Entradas e saídas de um mês pela regra acima, com as listas que as compõem
@@ -126,6 +133,55 @@ public class RelatorioService {
                         .filter(l -> l.getTipo() == TipoLancamento.R)
                         .map(Lancamento::getValor)
                         .reduce(BigDecimal.ZERO, BigDecimal::add))
+                .build();
+
+    }
+
+    /**
+     * Total líquido das faturas de cada cartão por mês de vencimento, para o gráfico:
+     * os {@link #FATURAS_MESES_ANTES} meses anteriores ao atual e os
+     * {@link #FATURAS_MESES_DEPOIS} a partir dele. É o mês do calendário, não o ciclo:
+     * cada barra é a fatura que vence naquele mês. Gera antes as fixas até o fim do
+     * último mês, como a tela da fatura faz quando se navega até lá.
+     */
+    @Transactional
+    public FaturasMensaisResponse faturasMensais() {
+
+        UUID usuario = authenticationCurrentUserService.getCurrentUser().getId();
+        YearMonth atual = YearMonth.now(clock);
+        List<YearMonth> meses = Stream.iterate(atual.minusMonths(FATURAS_MESES_ANTES), m -> m.plusMonths(1))
+                .limit(FATURAS_MESES_ANTES + FATURAS_MESES_DEPOIS)
+                .toList();
+        YearMonth ultimo = meses.getLast();
+
+        recorrenciaService.gerarAte(usuario, ultimo.atEndOfMonth());
+        return faturasMensais(meses, lancamentoRepository
+                .findAllByUsuarioAndCartaoIsNotNullAndFaturaBetween(usuario, meses.getFirst().atDay(1), ultimo.atEndOfMonth()));
+
+    }
+
+    /**
+     * Agrupa as compras por cartão e mês da fatura. Só entram cartões com algum valor no
+     * período, na ordem da tela de cadastros.
+     */
+    static FaturasMensaisResponse faturasMensais(List<YearMonth> meses, List<Lancamento> noCartao) {
+
+        Map<Cartao, Map<YearMonth, List<Lancamento>>> porCartao = noCartao.stream()
+                .collect(Collectors.groupingBy(Lancamento::getCartao,
+                        Collectors.groupingBy(l -> YearMonth.from(l.getFatura()))));
+
+        List<FaturasMensaisResponse.FaturasCartao> cartoes = porCartao.entrySet().stream()
+                .sorted(Comparator.comparing((Map.Entry<Cartao, ?> e) -> e.getKey().getOrdem(), Comparator.nullsLast(Comparator.naturalOrder()))
+                        .thenComparing(e -> e.getKey().getNome()))
+                .map(e -> new FaturasMensaisResponse.FaturasCartao(e.getKey().getId(), e.getKey().getNome(), meses.stream()
+                        .map(m -> FaturaService.liquido(e.getValue().getOrDefault(m, List.of())))
+                        .toList()))
+                .filter(c -> c.getValores().stream().anyMatch(v -> v.signum() != 0))
+                .toList();
+
+        return FaturasMensaisResponse.builder()
+                .meses(meses.stream().map(m -> new FaturasMensaisResponse.Mes(m.getYear(), m.getMonthValue())).toList())
+                .cartoes(cartoes)
                 .build();
 
     }

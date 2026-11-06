@@ -5,6 +5,7 @@ import lombok.extern.log4j.Log4j2;
 import net.guilhermejr.sistema.gastosservice.api.response.AgendaResponse;
 import net.guilhermejr.sistema.gastosservice.api.response.CategoriasMensalResponse;
 import net.guilhermejr.sistema.gastosservice.api.response.DashboardResponse;
+import net.guilhermejr.sistema.gastosservice.api.response.FaturasMensaisResponse;
 import net.guilhermejr.sistema.gastosservice.api.response.RelatorioMensalResponse;
 import net.guilhermejr.sistema.gastosservice.domain.enums.TipoLancamento;
 import net.guilhermejr.sistema.gastosservice.service.DashboardService;
@@ -60,6 +61,14 @@ public class DashboardController {
 
         log.info("Categorias de {}/{}", mes, ano);
         return ResponseEntity.status(HttpStatus.OK).body(relatorioService.categorias(ano, mes));
+
+    }
+
+    @GetMapping("/relatorios/faturas")
+    public ResponseEntity<FaturasMensaisResponse> faturasMensais() {
+
+        log.info("Faturas de cartão mês a mês");
+        return ResponseEntity.status(HttpStatus.OK).body(relatorioService.faturasMensais());
 
     }
 

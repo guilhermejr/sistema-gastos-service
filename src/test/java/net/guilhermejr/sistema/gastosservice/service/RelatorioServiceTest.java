@@ -1,6 +1,7 @@
 package net.guilhermejr.sistema.gastosservice.service;
 
 import net.guilhermejr.sistema.gastosservice.api.response.FaturaResumidaResponse;
+import net.guilhermejr.sistema.gastosservice.api.response.FaturasMensaisResponse;
 import net.guilhermejr.sistema.gastosservice.api.response.ValorCategoriaResponse;
 import net.guilhermejr.sistema.gastosservice.domain.entity.Cartao;
 import net.guilhermejr.sistema.gastosservice.domain.entity.Categoria;
@@ -157,6 +158,41 @@ public class RelatorioServiceTest {
         Assertions.assertEquals(List.of("Mercado", "Lazer"), despesas.stream().map(ValorCategoriaResponse::getDescricao).toList());
         Assertions.assertEquals(List.of(new BigDecimal("70.00"), new BigDecimal("50.00")), despesas.stream().map(ValorCategoriaResponse::getValor).toList());
         Assertions.assertEquals(List.of(3L), RelatorioService.porCategoria(lancamentos, TipoLancamento.R).stream().map(ValorCategoriaResponse::getCategoriaId).toList());
+
+    }
+
+    @Test
+    @DisplayName("Faturas mês a mês: líquido por cartão na ordem dos meses, zero onde não há fatura e sem cartões zerados")
+    public void faturas_mensais() {
+
+        Cartao itau = cartao(1, null);
+        itau.setNome("Itaú");
+        itau.setOrdem(2);
+        Cartao nubank = cartao(2, null);
+        nubank.setNome("Nubank");
+        nubank.setOrdem(1);
+        Cartao parado = cartao(3, null);
+        parado.setNome("Parado");
+        parado.setOrdem(3);
+        List<YearMonth> meses = List.of(YearMonth.of(2026, 10), YearMonth.of(2026, 11), YearMonth.of(2026, 12));
+
+        Lancamento estorno = noCartao(itau, "30.00");
+        estorno.setTipo(TipoLancamento.R);
+        Lancamento itauNovembro = noCartao(itau, "50.00");
+        itauNovembro.setFatura(LocalDate.of(2026, 11, 10));
+        Lancamento nubankDezembro = noCartao(nubank, "80.00");
+        nubankDezembro.setFatura(LocalDate.of(2026, 12, 5));
+        Lancamento paradoEstornado = noCartao(parado, "10.00");
+        Lancamento paradoEstorno = noCartao(parado, "10.00");
+        paradoEstorno.setTipo(TipoLancamento.R);
+
+        FaturasMensaisResponse resposta = RelatorioService.faturasMensais(meses, List.of(
+                noCartao(itau, "100.00"), estorno, itauNovembro, nubankDezembro, paradoEstornado, paradoEstorno));
+
+        Assertions.assertEquals(List.of(11, 12), resposta.getMeses().stream().skip(1).map(FaturasMensaisResponse.Mes::getMes).toList());
+        Assertions.assertEquals(List.of("Nubank", "Itaú"), resposta.getCartoes().stream().map(FaturasMensaisResponse.FaturasCartao::getNome).toList());
+        Assertions.assertEquals(List.of(BigDecimal.ZERO, BigDecimal.ZERO, new BigDecimal("80.00")), resposta.getCartoes().get(0).getValores());
+        Assertions.assertEquals(List.of(new BigDecimal("70.00"), new BigDecimal("50.00"), BigDecimal.ZERO), resposta.getCartoes().get(1).getValores());
 
     }
 
