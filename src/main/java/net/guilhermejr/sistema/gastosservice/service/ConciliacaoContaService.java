@@ -511,8 +511,8 @@ public class ConciliacaoContaService {
         return new ItemContaResponse(null, m.getId(), item.tipo(), descricao(m), item.valor(), item.data(), true, null, null, null);
     }
 
-    /** Movimentação sem descrição: o que ela é, para quem olha a conta. */
-    private static String descricao(Movimentacao m) {
+    /** Movimentação sem descrição: o que ela é, para quem olha a conta. O extrato usa a mesma. */
+    static String descricao(Movimentacao m) {
         if (m.getDescricao() != null && !m.getDescricao().isBlank()) {
             return m.getDescricao();
         }

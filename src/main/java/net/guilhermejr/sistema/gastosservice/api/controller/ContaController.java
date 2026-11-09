@@ -12,11 +12,13 @@ import net.guilhermejr.sistema.gastosservice.api.request.PagarFaturaContaRequest
 import net.guilhermejr.sistema.gastosservice.api.request.RendimentoContaRequest;
 import net.guilhermejr.sistema.gastosservice.api.response.ConciliacaoContaResponse;
 import net.guilhermejr.sistema.gastosservice.api.response.ContaResponse;
+import net.guilhermejr.sistema.gastosservice.api.response.ExtratoContaResponse;
 import net.guilhermejr.sistema.gastosservice.api.response.MovimentacaoResponse;
 import net.guilhermejr.sistema.gastosservice.api.response.SincronizacaoContaResponse;
 import net.guilhermejr.sistema.gastosservice.service.ConciliacaoContaService;
 import net.guilhermejr.sistema.gastosservice.service.ContaBancoService;
 import net.guilhermejr.sistema.gastosservice.service.ContaService;
+import net.guilhermejr.sistema.gastosservice.service.ExtratoService;
 import net.guilhermejr.sistema.gastosservice.service.MovimentacaoService;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
@@ -36,6 +38,7 @@ public class ContaController {
     private final MovimentacaoService movimentacaoService;
     private final ContaBancoService contaBancoService;
     private final ConciliacaoContaService conciliacaoContaService;
+    private final ExtratoService extratoService;
 
     @GetMapping
     public ResponseEntity<List<ContaResponse>> retornar(@RequestParam(defaultValue = "false") boolean ativas) {
@@ -58,6 +61,16 @@ public class ContaController {
 
         log.info("Retornando movimentações da conta {} em {}/{}", id, mes, ano);
         return ResponseEntity.status(HttpStatus.OK).body(movimentacaoService.retornarDaConta(id, ano, mes));
+
+    }
+
+    /** Datas em dd/MM/aaaa; sem as duas, o ciclo atual. */
+    @GetMapping("/{id}/extrato")
+    public ResponseEntity<ExtratoContaResponse> extrato(@PathVariable Long id, @RequestParam(required = false) String inicio,
+                                                        @RequestParam(required = false) String fim) {
+
+        log.info("Extrato da conta {} de {} a {}", id, inicio, fim);
+        return ResponseEntity.status(HttpStatus.OK).body(extratoService.extrato(id, inicio, fim));
 
     }
 

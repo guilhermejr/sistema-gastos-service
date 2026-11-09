@@ -37,6 +37,13 @@ public interface LancamentoRepository extends JpaRepository<Lancamento, Long> {
 
     List<Lancamento> findAllByContaAndDataBetweenOrderByDataAscIdAsc(Conta conta, LocalDate inicio, LocalDate fim);
 
+    List<Lancamento> findAllByContaAndRealizadoTrueAndDataBetweenOrderByDataAscIdAsc(Conta conta, LocalDate inicio, LocalDate fim);
+
+    /** [tipo, soma] do que foi realizado na conta antes do dia informado — o saldo anterior do extrato. */
+    @Query("SELECT l.tipo, SUM(l.valor) FROM Lancamento l WHERE l.conta = :conta AND l.realizado = true "
+            + "AND l.data < :data GROUP BY l.tipo")
+    List<Object[]> somarRealizadosDaContaAntesDe(@Param("conta") Conta conta, @Param("data") LocalDate data);
+
     boolean existsByCategoria(Categoria categoria);
 
     /** Compras de cartão do usuário cujas faturas vencem no período, de qualquer cartão. */

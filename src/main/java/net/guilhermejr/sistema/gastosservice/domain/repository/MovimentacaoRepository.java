@@ -9,6 +9,7 @@ import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 import org.springframework.stereotype.Repository;
 
+import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.util.List;
 import java.util.Optional;
@@ -33,6 +34,11 @@ public interface MovimentacaoRepository extends JpaRepository<Movimentacao, Long
 
     List<Movimentacao> findAllByUsuarioAndTipoAndDataBetweenOrderByDataAscIdAsc(UUID usuario, TipoMovimentacao tipo,
                                                                               LocalDate inicio, LocalDate fim);
+
+    /** O que entrou menos o que saiu da conta antes do dia informado — o saldo anterior do extrato. */
+    @Query("SELECT COALESCE(SUM(CASE WHEN m.contaDestino = :conta THEN m.valor ELSE -m.valor END), 0) FROM Movimentacao m "
+            + "WHERE (m.contaOrigem = :conta OR m.contaDestino = :conta) AND m.data < :data")
+    BigDecimal somarDaContaAntesDe(@Param("conta") Conta conta, @Param("data") LocalDate data);
 
     /** [contaId, soma] do que entrou em cada conta. */
     @Query("SELECT m.contaDestino.id, SUM(m.valor) FROM Movimentacao m WHERE m.usuario = :usuario "
