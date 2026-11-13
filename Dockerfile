@@ -11,5 +11,7 @@ HEALTHCHECK --interval=30s --timeout=5s --start-period=90s --retries=3 \
 ENV HOME=/tmp
 USER 10001:10001
 
-ENTRYPOINT ["java","-Dspring.profiles.active=prod","-jar","/sistema-gastos-service.jar"]
+# Espera o config-server ficar pronto (no maximo 3 min) antes de iniciar, para nao
+# falhar e reiniciar em loop quando todos os containers sobem juntos no boot.
+ENTRYPOINT ["sh", "-c", "for i in $(seq 60); do curl -fsS -o /dev/null http://config-server:8888/actuator/health && break; echo 'Aguardando o config-server...'; sleep 3; done; exec java -Dspring.profiles.active=prod -jar /sistema-gastos-service.jar"]
 EXPOSE 9008

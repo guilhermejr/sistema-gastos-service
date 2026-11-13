@@ -8,6 +8,9 @@ services:
       - no-new-privileges:true
     cap_drop:
       - ALL
+    mem_limit: 768m
+    environment:
+      - JAVA_TOOL_OPTIONS=-XX:MaxRAMPercentage=50 -XX:+ExitOnOutOfMemoryError
     ports:
       - "127.0.0.1:9008:9008"
 
