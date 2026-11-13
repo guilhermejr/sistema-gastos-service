@@ -4,7 +4,7 @@ services:
     container_name: gastos-service
     restart: always
     ports:
-      - "9008:9008"
+      - "127.0.0.1:9008:9008"
 
 networks:
   default:
