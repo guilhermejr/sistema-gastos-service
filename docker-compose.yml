@@ -3,6 +3,7 @@ services:
     image: guilhermejr/sistema-gastos-service
     container_name: gastos-service
     restart: always
+    env_file: /home/guilhermejr/secrets/gastos-service.env
     ports:
       - "127.0.0.1:9008:9008"
 
